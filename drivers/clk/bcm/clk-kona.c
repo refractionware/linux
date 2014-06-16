@@ -22,6 +22,9 @@
 #define CCU_ACCESS_PASSWORD      0xA5A500
 #define CLK_GATE_DELAY_LOOP      2000
 
+#define clk_is_initialized(_clk)	FLAG_TEST((_clk), KONA, INITIALIZED)
+#define clk_set_initialized(_clk)	FLAG_SET((_clk), KONA, INITIALIZED)
+
 /* Bitfield operations */
 
 /* Produces a mask of set bits covering a range of a 32-bit value */
@@ -1020,6 +1023,9 @@ static int kona_clk_prepare(struct clk_hw *hw)
 	unsigned long flags;
 	int ret = 0;
 
+	if (clk_is_initialized(bcm_clk))
+		return 0;
+
 	flags = ccu_lock(ccu);
 	__ccu_write_enable(ccu);
 
@@ -1035,11 +1041,17 @@ static int kona_clk_prepare(struct clk_hw *hw)
 	__ccu_write_disable(ccu);
 	ccu_unlock(ccu, flags);
 
+	if (!ret)
+		clk_set_initialized(bcm_clk);
+
 	return ret;
 }
 
 static void kona_clk_unprepare(struct clk_hw *hw)
 {
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+
+	WARN_ON(!clk_is_initialized(bcm_clk));
 	/* Nothing to do. */
 }
 
