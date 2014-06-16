@@ -379,6 +379,12 @@ struct bcm_clk_trig {
 		.flags = FLAG(TRIG, EXISTS),				\
 	}
 
+struct bus_clk_data {
+	struct bcm_clk_policy policy;
+	struct bcm_clk_gate gate;
+	struct bcm_clk_hyst hyst;
+};
+
 struct peri_clk_data {
 	struct bcm_clk_policy policy;
 	struct bcm_clk_gate gate;
@@ -405,6 +411,7 @@ struct kona_clk {
 	} prereq;
 	union {
 		void *data;
+		struct bus_clk_data *bus;
 		struct peri_clk_data *peri;
 	} u;
 };
@@ -508,6 +515,7 @@ struct ccu_data {
 
 /* Exported globals */
 
+extern struct clk_ops kona_bus_clk_ops;
 extern struct clk_ops kona_peri_clk_ops;
 
 /* Externally visible functions */
