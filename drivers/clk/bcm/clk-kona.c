@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 
 /*
@@ -1016,12 +1017,55 @@ static bool __peri_clk_init(struct kona_clk *bcm_clk)
 }
 
 /* Clock operations */
+static int kona_prereq_prepare_enable(struct kona_clk *bcm_clk)
+{
+	const char *clk_name = bcm_clk->init_data.name;
+	const char *prereq_name = bcm_clk->prereq.name;
+	struct clk *prereq_clk = bcm_clk->prereq.clk;
+	int ret;
+
+	BUG_ON(!clk_name);
+
+	/* Look up the prerequisite clock if we haven't already */
+	if (!prereq_clk) {
+		prereq_clk = __clk_lookup(prereq_name);
+		if (WARN_ON_ONCE(!prereq_clk))
+			return -ENOENT;
+		bcm_clk->prereq.clk = prereq_clk;
+	}
+
+	/* Dependent clock already holds the prepare lock */
+	ret = clk_prepare(prereq_clk);
+	if (ret) {
+		pr_err("%s: unable to prepare prereq clock %s for %s\n",
+			__func__, prereq_name, clk_name);
+		return ret;
+	}
+
+	ret = clk_enable(prereq_clk);
+	if (ret) {
+		clk_unprepare(prereq_clk);
+		pr_err("%s: unable to enable prereq clock %s for %s\n",
+			__func__, prereq_name, clk_name);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int kona_clk_prepare(struct clk_hw *hw)
 {
 	struct kona_clk *bcm_clk = to_kona_clk(hw);
 	struct ccu_data *ccu = bcm_clk->ccu;
 	unsigned long flags;
 	int ret = 0;
+
+	/* Prepare the prerequisite clock first */
+	if (bcm_clk->prereq.name) {
+		ret = kona_prereq_prepare_enable(bcm_clk);
+		if (ret)
+			goto out;
+	}
 
 	if (clk_is_initialized(bcm_clk))
 		return 0;
@@ -1040,11 +1084,26 @@ static int kona_clk_prepare(struct clk_hw *hw)
 
 	__ccu_write_disable(ccu);
 	ccu_unlock(ccu, flags);
-
+out:
 	if (!ret)
 		clk_set_initialized(bcm_clk);
 
 	return ret;
+}
+
+/*
+ * Disable and unprepare a prerequisite clock, and drop our
+ * reference to it.
+ */
+static void kona_prereq_disable_unprepare(struct kona_clk *bcm_clk)
+{
+	struct clk *prereq_clk = bcm_clk->prereq.clk;
+
+	BUG_ON(!bcm_clk->prereq.name);
+	WARN_ON_ONCE(!prereq_clk);
+
+	clk_disable(prereq_clk);
+	clk_unprepare(prereq_clk);
 }
 
 static void kona_clk_unprepare(struct clk_hw *hw)
@@ -1052,7 +1111,15 @@ static void kona_clk_unprepare(struct clk_hw *hw)
 	struct kona_clk *bcm_clk = to_kona_clk(hw);
 
 	WARN_ON(!clk_is_initialized(bcm_clk));
-	/* Nothing to do. */
+
+	/*
+	 * We don't do anything to unprepare Kona clocks themselves,
+	 * but if there's a prerequisite we'll need to unprepare it.
+	 */
+	if (!bcm_clk->prereq.name)
+		return;
+
+	kona_prereq_disable_unprepare(bcm_clk);
 }
 
 static int kona_peri_clk_enable(struct clk_hw *hw)
