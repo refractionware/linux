@@ -497,6 +497,5 @@ extern u64 scaled_div_build(struct bcm_clk_div *div, u32 div_value,
 
 extern void __init kona_dt_ccu_setup(struct ccu_data *ccu,
 				struct device_node *node);
-extern bool __init kona_ccu_init(struct ccu_data *ccu);
 
 #endif /* _CLK_KONA_H */

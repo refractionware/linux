@@ -845,9 +845,6 @@ void __init kona_dt_ccu_setup(struct ccu_data *ccu,
 		goto out_err;
 	}
 
-	if (!kona_ccu_init(ccu))
-		pr_err("Broadcom %pOFn initialization had errors\n", node);
-
 	return;
 out_err:
 	kona_ccu_teardown(ccu);

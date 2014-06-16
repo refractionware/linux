@@ -1012,43 +1012,36 @@ static bool __peri_clk_init(struct kona_clk *bcm_clk)
 	return true;
 }
 
-static bool __kona_clk_init(struct kona_clk *bcm_clk)
+/* Clock operations */
+static int kona_clk_prepare(struct clk_hw *hw)
 {
-	switch (bcm_clk->type) {
-	case bcm_clk_peri:
-		return __peri_clk_init(bcm_clk);
-	default:
-		BUG();
-	}
-	return false;
-}
-
-/* Set a CCU and all its clocks into their desired initial state */
-bool __init kona_ccu_init(struct ccu_data *ccu)
-{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct ccu_data *ccu = bcm_clk->ccu;
 	unsigned long flags;
-	unsigned int which;
-	struct kona_clk *kona_clks = ccu->kona_clks;
-	bool success = true;
+	int ret = 0;
 
 	flags = ccu_lock(ccu);
 	__ccu_write_enable(ccu);
 
-	for (which = 0; which < ccu->clk_num; which++) {
-		struct kona_clk *bcm_clk = &kona_clks[which];
-
-		if (!bcm_clk->ccu)
-			continue;
-
-		success &= __kona_clk_init(bcm_clk);
+	switch (bcm_clk->type) {
+	case bcm_clk_peri:
+		if (!__peri_clk_init(bcm_clk))
+			ret = -EINVAL;
+		break;
+	default:
+		BUG();
 	}
 
 	__ccu_write_disable(ccu);
 	ccu_unlock(ccu, flags);
-	return success;
+
+	return ret;
 }
 
-/* Clock operations */
+static void kona_clk_unprepare(struct clk_hw *hw)
+{
+	/* Nothing to do. */
+}
 
 static int kona_peri_clk_enable(struct clk_hw *hw)
 {
@@ -1259,6 +1252,8 @@ static int kona_peri_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 }
 
 struct clk_ops kona_peri_clk_ops = {
+	.prepare = kona_clk_prepare,
+	.unprepare = kona_clk_unprepare,
 	.enable = kona_peri_clk_enable,
 	.disable = kona_peri_clk_disable,
 	.is_enabled = kona_peri_clk_is_enabled,
