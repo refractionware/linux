@@ -2119,9 +2119,11 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 			 enum printk_info_flags *flags, const char *fmt,
 			 va_list args)
 {
+	extern void printascii(const char *);
 	u16 text_len;
 
 	text_len = vscnprintf(text, size, fmt, args);
+	printascii(text);
 
 	/* Mark and strip a trailing newline. */
 	if (text_len && text[text_len - 1] == '\n') {
