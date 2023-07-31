@@ -577,6 +577,7 @@ static int max77693_muic_adc_ground_handler(struct max77693_muic_info *info)
 	int cable_type_gnd;
 	int ret = 0;
 	bool attached;
+	unsigned int chg_cnfg_00, int_mask, cdetctrl1;
 
 	cable_type_gnd = max77693_muic_get_cable_type(info,
 				MAX77693_CABLE_GROUP_ADC_GND, &attached);
@@ -589,6 +590,71 @@ static int max77693_muic_adc_ground_handler(struct max77693_muic_info *info)
 						attached);
 		if (ret < 0)
 			return ret;
+
+		if (attached) {
+			/* disable charger interrupt */
+			regmap_read(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_INT_MASK, &int_mask);
+			int_mask |= (1 << 4);	/* disable chgin intr */
+			int_mask |= (1 << 6);	/* disable chg */
+
+			int_mask &= ~(1 << 0);	/* enable byp intr */
+			regmap_write(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_INT_MASK, int_mask);
+
+			/* disable charger detection */
+			regmap_read(info->max77693->regmap_muic,
+				MAX77693_MUIC_REG_CDETCTRL1, &cdetctrl1);
+			cdetctrl1 &= ~(1 << 0);
+			regmap_write(info->max77693->regmap_muic,
+				MAX77693_MUIC_REG_CDETCTRL1, cdetctrl1);
+
+			/* OTG on, boost on, DIS_MUIC_CTRL=1 */
+			regmap_read(info->max77693->regmap,
+					MAX77693_CHG_REG_CHG_CNFG_00, &chg_cnfg_00);
+			chg_cnfg_00 &= ~(CHG_CNFG_00_CHG_MASK
+					| CHG_CNFG_00_OTG_MASK
+					| CHG_CNFG_00_BUCK_MASK
+					| CHG_CNFG_00_BOOST_MASK
+					| CHG_CNFG_00_DIS_MUIC_CTRL_MASK);
+			chg_cnfg_00 |= (CHG_CNFG_00_OTG_MASK
+					| CHG_CNFG_00_BOOST_MASK
+					| CHG_CNFG_00_DIS_MUIC_CTRL_MASK);
+
+			regmap_write(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_CNFG_00, chg_cnfg_00);
+		} else {
+			/* OTG off, boost off, (buck on),
+			   DIS_MUIC_CTRL = 0 unless CHG_ENA = 1 */
+			regmap_read(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_CNFG_00, &chg_cnfg_00);
+			chg_cnfg_00 &= ~(CHG_CNFG_00_OTG_MASK
+					| CHG_CNFG_00_BOOST_MASK
+					| CHG_CNFG_00_DIS_MUIC_CTRL_MASK);
+			chg_cnfg_00 |= CHG_CNFG_00_BUCK_MASK;
+			regmap_write(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_CNFG_00, chg_cnfg_00);
+
+			mdelay(50);
+
+			/* enable charger detection */
+			regmap_read(info->max77693->regmap_muic,
+				MAX77693_MUIC_REG_CDETCTRL1, &cdetctrl1);
+			cdetctrl1 |= (1 << 0);
+			regmap_write(info->max77693->regmap_muic,
+				MAX77693_MUIC_REG_CDETCTRL1, cdetctrl1);
+
+			/* enable charger interrupt */
+			regmap_read(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_INT_MASK, &int_mask);
+			int_mask &= ~(1 << 4);	/* enable chgin intr */
+			int_mask &= ~(1 << 6);	/* enable chg */
+
+			int_mask |= (1 << 0);	/* disable byp intr */
+			regmap_write(info->max77693->regmap,
+				MAX77693_CHG_REG_CHG_INT_MASK, int_mask);
+		}
+
 		extcon_set_state_sync(info->edev, EXTCON_USB_HOST, attached);
 		break;
 	case MAX77693_MUIC_GND_AV_CABLE_LOAD:
@@ -957,6 +1023,8 @@ static void max77693_muic_irq_work(struct work_struct *work)
 		return;
 	}
 
+	dev_info(info->dev, "parsing IRQ of type %d %d", irq_type, info->irq);
+
 	switch (irq_type) {
 	case MAX77693_MUIC_IRQ_INT1_ADC:
 	case MAX77693_MUIC_IRQ_INT1_ADC_LOW:
@@ -1000,7 +1068,17 @@ static void max77693_muic_irq_work(struct work_struct *work)
 static irqreturn_t max77693_muic_irq_handler(int irq, void *data)
 {
 	struct max77693_muic_info *info = data;
+	int irq_type;
+	int i;
 
+	for (i = 0; i < ARRAY_SIZE(muic_irqs); i++)
+		if (irq == muic_irqs[i].virq)
+			irq_type = muic_irqs[i].irq;
+
+	if (irq_type == MAX77693_MUIC_IRQ_INT2_VIDRM)
+		return IRQ_HANDLED;
+
+	pr_info("irq handler: %d", irq);
 	info->irq = irq;
 	schedule_work(&info->irq_work);
 
