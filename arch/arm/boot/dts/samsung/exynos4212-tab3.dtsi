@@ -453,6 +453,12 @@
 	};
 };
 
+&ehci {
+	/*phys = <&exynos_usbphy 1>;
+	phy-names = "host";*/
+	status = "okay";
+};
+
 &exynos_usbphy {
 	vbus-supply = <&esafeout1_reg>;
 	status = "okay";
