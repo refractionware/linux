@@ -21,6 +21,7 @@ static int node_offset(void *fdt, const char *node_path)
 	return offset;
 }
 
+/*
 static int setprop(void *fdt, const char *node_path, const char *property,
 		   void *val_array, int size)
 {
@@ -29,6 +30,7 @@ static int setprop(void *fdt, const char *node_path, const char *property,
 		return offset;
 	return fdt_setprop(fdt, offset, property, val_array, size);
 }
+*/
 
 static int setprop_string(void *fdt, const char *node_path,
 			  const char *property, const char *string)
@@ -209,10 +211,12 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 		}
 	}
 
+	/*
 	if (memcount) {
 		setprop(fdt, "/memory", "reg", mem_reg_property,
 			4 * memcount * memsize);
 	}
+	*/
 
 	return fdt_pack(fdt);
 }
