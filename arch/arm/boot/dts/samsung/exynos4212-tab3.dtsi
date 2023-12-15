@@ -159,6 +159,8 @@
 				maxim,thermal-regulation-celsius = <100>;
 				maxim,battery-overcurrent-microamp = <3500000>;
 				maxim,charge-input-threshold-microvolt = <4300000>;
+				maxim,min-charge-microamp = <500000>;
+				maxim,max-charge-microamp = <1800000>;
 			};
 		};
 	};
@@ -179,6 +181,7 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&max77693_fuel_irq>;
 
+			maxim,rsns-microohm = <10000>;
 			maxim,over-heat-temp = <500>;
 			maxim,over-volt = <4500>;
 		};
