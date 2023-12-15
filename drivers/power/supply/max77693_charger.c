@@ -31,6 +31,8 @@ struct max77693_charger {
 	u32 thermal_regulation_temp;
 	u32 batttery_overcurrent;
 	u32 charge_input_threshold_volt;
+	u32 min_charge_current;
+	u32 max_charge_current;
 
 	/* SDP/DCP USB charging cable notifications */
 	struct {
@@ -610,11 +612,9 @@ static int max77693_enable_charger(struct max77693_charger *chg, bool enable)
 	int ret;
 
 	if (enable) {
-		ret = regulator_set_current_limit(
-			chg->regu,
-			CHG_CNFG_09_CHGIN_ILIM_500_MIN,
-			CHG_CNFG_09_CHGIN_ILIM_500_MAX);
-
+		ret = regulator_set_current_limit(chg->regu,
+						  (int)chg->min_charge_current,
+						  (int)chg->max_charge_current);
 		if (ret < 0)
 			return ret;
 
@@ -783,6 +783,14 @@ static int max77693_dt_init(struct device *dev, struct max77693_charger *chg)
 			&chg->charge_input_threshold_volt))
 		chg->charge_input_threshold_volt =
 			DEFAULT_CHARGER_INPUT_THRESHOLD_VOLT;
+
+	if (of_property_read_u32(np, "maxim,min-charge-microamp",
+			&chg->min_charge_current))
+		chg->min_charge_current = CHG_CNFG_09_CHGIN_ILIM_500_MIN;
+
+	if (of_property_read_u32(np, "maxim,max-charge-microamp",
+			&chg->max_charge_current))
+		chg->max_charge_current = CHG_CNFG_09_CHGIN_ILIM_500_MAX;
 
 	return 0;
 }
