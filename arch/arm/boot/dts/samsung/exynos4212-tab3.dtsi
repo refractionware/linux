@@ -45,6 +45,9 @@
 		/* Default S-BOOT bootloader loads initramfs here */
 		linux,initrd-start = <0x42000000>;
 		linux,initrd-end = <0x42800000>;
+
+		/* Stock bootloader provides wrong memory data */
+		linux,ignore-atag-mem;
 	};
 
 	firmware@204f000 {
