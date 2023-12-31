@@ -59,6 +59,19 @@ static const void *getprop(const void *fdt, const char *node_path,
 	return fdt_getprop(fdt, offset, property, len);
 }
 
+static const bool getprop_bool(const void *fdt, const char *node_path,
+			   const char *property)
+{
+	int offset = fdt_path_offset(fdt, node_path);
+	const void *prop;
+
+	if (offset == -FDT_ERR_NOTFOUND)
+		return false;
+
+	prop = fdt_getprop(fdt, offset, property, NULL);
+	return prop ? true : false;
+}
+
 static uint32_t get_cell_size(const void *fdt)
 {
 	int len;
@@ -209,7 +222,7 @@ int atags_to_fdt(void *atag_list, void *fdt, int total_space)
 		}
 	}
 
-	if (memcount) {
+	if (memcount && !getprop_bool(fdt, "/chosen", "linux,ignore-atag-mem")) {
 		setprop(fdt, "/memory", "reg", mem_reg_property,
 			4 * memcount * memsize);
 	}
