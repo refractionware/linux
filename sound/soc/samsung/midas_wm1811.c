@@ -28,6 +28,8 @@
 #define MCLK2_RATE 32768U
 #define DEFAULT_FLL1_RATE 11289600U
 
+#define ADC_SAMPLE_SIZE 5
+
 struct midas_priv {
 	struct regulator *reg_mic_bias;
 	struct regulator *reg_submic_bias;
@@ -55,10 +57,10 @@ static struct snd_soc_jack_pin headset_jack_pins[] = {
 static struct snd_soc_jack_zone headset_jack_zones[] = {
 	{
 		.min_mv = 0,
-		.max_mv = 241,
+		.max_mv = 180,
 		.jack_type = SND_JACK_HEADPHONE,
 	}, {
-		.min_mv = 242,
+		.min_mv = 181,
 		.max_mv = 2980,
 		.jack_type = SND_JACK_HEADSET,
 	}, {
@@ -68,69 +70,153 @@ static struct snd_soc_jack_zone headset_jack_zones[] = {
 	},
 };
 
-static irqreturn_t headset_det_irq_thread(int irq, void *data)
+/*
+ * This is used for manual detection in headset_key_check, we reuse the
+ * structure since it's convenient
+ */
+static struct snd_soc_jack_zone headset_key_zones[] = {
+	{
+		.min_mv = 0,
+		.max_mv = 260,
+		.jack_type = SND_JACK_BTN_0, /* Media */
+	}, {
+		.min_mv = 261,
+		.max_mv = 530,
+		.jack_type = SND_JACK_BTN_1, /* Volume Up */
+	}, {
+		.min_mv = 531,
+		.max_mv = 1800,
+		.jack_type = SND_JACK_BTN_2, /* Volume Down */
+	},
+};
+
+static int headset_adc_read_debounced(struct iio_channel* headset_detect_adc)
+{
+	int adc, i, ret, retry_count;
+	int total = 0;
+	int min = 0;
+	int max = 0;
+
+	pr_info("DEBUG: ADC read begin\n");
+
+	for (i = 0; i < ADC_SAMPLE_SIZE; i++) {
+		for (retry_count = 0; retry_count < 5; retry_count++) {
+			ret = iio_read_channel_processed(headset_detect_adc,
+							 &adc);
+			if (ret == 0)
+				break;
+			pr_info("DEBUG: Had to retry ADC read at %d\n", i);
+
+			msleep(20);
+		}
+		if (retry_count == 4)
+			return ret;
+
+		if (i == 0) {
+			min = adc;
+			max = adc;
+		} else {
+			if (adc < min)
+				min = adc;
+			if (adc > max)
+				max = adc;
+		}
+
+		pr_info("DEBUG: (%d) read %d, min %d max %d\n", i, adc, min, max);
+
+		total += adc;
+	}
+
+	return (total - min - max) / (ADC_SAMPLE_SIZE - 2);
+}
+
+static int headset_jack_check(void *data)
 {
 	struct midas_priv *priv = (struct midas_priv *) data;
 	int ret = 0;
 	int time_left_ms = 300;
-	int adc;
+	int adc, jack_type;
 
 	while (time_left_ms > 0) {
 		if (!gpiod_get_value(priv->gpio_headset_detect)) {
-			snd_soc_jack_report(&priv->headset_jack, 0,
-					SND_JACK_HEADSET);
-			pr_info("%s: no headset detected by GPIO", __func__);
-			return IRQ_HANDLED;
+			return 0;
 		}
 		msleep(20);
 		time_left_ms -= 20;
 	}
 
-	pr_info("%s: headset detected by GPIO", __func__);
-
-	/* Temporarily enable micbias */
+	/* Temporarily enable micbias for ADC measurement */
 	ret = regulator_enable(priv->reg_mic_bias);
 	if (ret)
-		pr_err("%s failed to enable micbias: %d", __func__, ret);
+		pr_err("%s: Failed to enable micbias: %d\n", __func__, ret);
 
-	ret = iio_read_channel_processed(priv->headset_detect_adc, &adc);
-	if (ret < 0) {
-		/* failed to read ADC, so assume headphone */
-		pr_err("%s failed to read ADC, assuming headphones", __func__);
-		snd_soc_jack_report(&priv->headset_jack, SND_JACK_HEADPHONE,
-				SND_JACK_HEADSET);
-	} else {
-		pr_info("%s: ads read %d, jack type %d", __func__, adc, snd_soc_jack_get_type(&priv->headset_jack, adc));
-		snd_soc_jack_report(&priv->headset_jack,
-				snd_soc_jack_get_type(&priv->headset_jack, adc),
-				SND_JACK_HEADSET);
+	/* Sleep for a small amount of time to get the value to stabilize */
+	msleep(20);
+
+	adc = headset_adc_read_debounced(priv->headset_detect_adc);
+	if (adc < 0) {
+		pr_err("%s: Failed to read ADC, assuming headphones\n",
+		       __func__);
+		return SND_JACK_HEADPHONE;
 	}
 
-	ret = regulator_disable(priv->reg_mic_bias);
-	if (ret)
-		pr_err("%s failed to disable micbias: %d", __func__, ret);
+	pr_info("%s: ADC value is %d\n", __func__, adc);
+	jack_type = snd_soc_jack_get_type(&priv->headset_jack, adc);
 
-	return IRQ_HANDLED;
+	/* Disable micbias if the jack is not a headset */
+	if ((jack_type & SND_JACK_HEADSET) != SND_JACK_HEADSET) {
+		ret = regulator_disable(priv->reg_mic_bias);
+		if (ret)
+			pr_err("%s: Failed to disable micbias: %d\n",
+			       __func__, ret);
+	}
+
+	return jack_type;
 }
 
-static int headset_button_check(void *data)
+static int headset_key_check(void *data)
 {
 	struct midas_priv *priv = (struct midas_priv *) data;
+	int adc, i;
+
+	if (!gpiod_get_value_cansleep(priv->gpio_headset_key))
+		return 0;
 
 	/* Filter out keypresses when 4 pole jack not detected */
-	if (gpiod_get_value_cansleep(priv->gpio_headset_key) &&
-			priv->headset_jack.status & SND_JACK_MICROPHONE)
-		return SND_JACK_BTN_0;
+	if (!(priv->headset_jack.status & SND_JACK_MICROPHONE))
+		return 0;
+
+	adc = headset_adc_read_debounced(priv->headset_detect_adc);
+	if (adc < 0) {
+		pr_err("%s: Failed to read ADC, can't detect key type\n",
+		       __func__);
+		return 0;
+	}
+
+	/* TODO - Does this even work on downstream? */
+	for (i = 0; i < ARRAY_SIZE(headset_key_zones); i++) {
+		if (adc >= headset_key_zones[i].min_mv &&
+		    adc <= headset_key_zones[i].max_mv) {
+			pr_info("%s: ADC value is %d\n", __func__, adc);
+			return headset_key_zones[i].jack_type;
+		}
+	}
 
 	return 0;
 }
 
-static struct snd_soc_jack_gpio headset_button_gpio[] = {
+static struct snd_soc_jack_gpio headset_gpio[] = {
 	{
-		.name = "Media Button",
-		.report = SND_JACK_BTN_0,
-		.debounce_time  = 30,
-		.jack_status_check = headset_button_check,
+		.name = "Headset Jack",
+		.report = SND_JACK_HEADSET,
+		.debounce_time = 30,
+		.jack_status_check = headset_jack_check,
+	},
+	{
+		.name = "Headset Key",
+		.report = SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2,
+		.debounce_time = 10,
+		.jack_status_check = headset_key_check,
 	},
 };
 
@@ -395,9 +481,7 @@ static int midas_late_probe(struct snd_soc_card *card)
 							&card->dai_link[0]);
 	struct snd_soc_dai *aif1_dai = snd_soc_rtd_to_codec(rtd, 0);
 	struct midas_priv *priv = snd_soc_card_get_drvdata(card);
-	int ret, irq;
-
-	pr_info("midas late probe");
+	int ret;
 
 	/* Use MCLK2 as SYSCLK for boot */
 	ret = snd_soc_dai_set_sysclk(aif1_dai, WM8994_SYSCLK_MCLK2, MCLK2_RATE,
@@ -426,13 +510,14 @@ static int midas_late_probe(struct snd_soc_card *card)
 		snd_soc_dapm_force_enable_pin(&card->dapm, "AIF1CLK");
 
 		ret = snd_soc_card_jack_new_pins(card, "Headset",
-				SND_JACK_HEADSET | SND_JACK_BTN_0,
+				SND_JACK_HEADSET | SND_JACK_BTN_0 |
+				SND_JACK_BTN_1 | SND_JACK_BTN_2,
 				&priv->headset_jack,
 				headset_jack_pins,
 				ARRAY_SIZE(headset_jack_pins));
 		if (ret) {
 			dev_err(card->dev,
-				"Failed to set up headset pins: %d", ret);
+				"Failed to set up headset pins: %d\n", ret);
 			return ret;
 		}
 
@@ -441,49 +526,33 @@ static int midas_late_probe(struct snd_soc_card *card)
 				headset_jack_zones);
 		if (ret) {
 			dev_err(card->dev,
-				"Failed to set up headset zones: %d", ret);
+				"Failed to set up headset zones: %d\n", ret);
 			return ret;
 		}
 
-		irq = gpiod_to_irq(priv->gpio_headset_detect);
-		if (irq < 0) {
-			dev_err(card->dev,
-				"Failed to map headset detect GPIO to IRQ: %d",
-				ret);
-			return -EINVAL;
-		}
+		headset_gpio[0].data = priv;
+		headset_gpio[0].desc = priv->gpio_headset_detect;
 
-		ret = devm_request_threaded_irq(card->dev, irq, NULL,
-				headset_det_irq_thread,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING |
-				IRQF_ONESHOT, "headset_detect", priv);
-		if (ret) {
-			dev_err(card->dev,
-				"Failed to request headset detect IRQ: %d",
-				ret);
-			return ret;
-		}
-
-		headset_button_gpio[0].data = priv;
-		headset_button_gpio[0].desc = priv->gpio_headset_key;
+		headset_gpio[1].data = priv;
+		headset_gpio[1].desc = priv->gpio_headset_key;
 
 		snd_jack_set_key(priv->headset_jack.jack,
 				 SND_JACK_BTN_0, KEY_MEDIA);
+		snd_jack_set_key(priv->headset_jack.jack,
+				 SND_JACK_BTN_1, KEY_VOLUMEUP);
+		snd_jack_set_key(priv->headset_jack.jack,
+				 SND_JACK_BTN_2, KEY_VOLUMEDOWN);
 
 		ret = snd_soc_jack_add_gpios(&priv->headset_jack,
-				ARRAY_SIZE(headset_button_gpio),
-				headset_button_gpio);
+				ARRAY_SIZE(headset_gpio),
+				headset_gpio);
 		if (ret)
 			dev_err(card->dev,
-				"Failed to set up headset jack GPIOs: %d",
+				"Failed to set up headset jack GPIOs: %d\n",
 				ret);
-
-		pr_info("midas late probe exit");
 
 		return ret;
 	}
-
-	pr_info("midas late probe exit");
 
 	return 0;
 }

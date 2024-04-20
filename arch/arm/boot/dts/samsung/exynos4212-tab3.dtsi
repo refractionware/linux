@@ -526,15 +526,16 @@
 	wm1811: audio-codec@1a {
 		compatible = "wlf,wm1811";
 		reg = <0x1a>;
-		clocks = <&pmu_system_controller 0>;
-		clock-names = "MCLK1";
+		/*
+		 * CODEC_CLK32K; listed as coming from the same parent as
+		 * BT_WIFI and GPS, that being 32KHZ_PMIC.
+		 * (Not very descriptive...)
+		 */
+		clocks = <&pmu_system_controller 0>,
+			 <&s5m8767_osc S2MPS11_CLK_BT>;
+		clock-names = "MCLK1", "MCLK2";
 		interrupt-controller;
 		#interrupt-cells = <2>;
-
-		/*
-		interrupt-parent = <&gpx3>;
-		interrupts = <6 IRQ_TYPE_LEVEL_HIGH>;
-		*/
 
 		gpio-controller;
 		#gpio-cells = <2>;
