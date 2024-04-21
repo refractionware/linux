@@ -72,19 +72,19 @@ static struct snd_soc_jack_zone headset_jack_zones[] = {
 
 /*
  * This is used for manual detection in headset_key_check, we reuse the
- * structure since it's convenient
+ * structure since it's convenient.
  */
 static struct snd_soc_jack_zone headset_key_zones[] = {
 	{
 		.min_mv = 0,
-		.max_mv = 260,
+		.max_mv = 130,
 		.jack_type = SND_JACK_BTN_0, /* Media */
 	}, {
-		.min_mv = 261,
-		.max_mv = 530,
+		.min_mv = 131,
+		.max_mv = 260,
 		.jack_type = SND_JACK_BTN_1, /* Volume Up */
 	}, {
-		.min_mv = 531,
+		.min_mv = 261,
 		.max_mv = 1800,
 		.jack_type = SND_JACK_BTN_2, /* Volume Down */
 	},
@@ -133,9 +133,8 @@ static int headset_adc_read_debounced(struct iio_channel* headset_detect_adc)
 static int headset_jack_check(void *data)
 {
 	struct midas_priv *priv = (struct midas_priv *) data;
-	int ret = 0;
 	int time_left_ms = 300;
-	int adc, jack_type;
+	int adc, jack_type, ret;
 
 	while (time_left_ms > 0) {
 		if (!gpiod_get_value(priv->gpio_headset_detect)) {
@@ -177,7 +176,8 @@ static int headset_jack_check(void *data)
 static int headset_key_check(void *data)
 {
 	struct midas_priv *priv = (struct midas_priv *) data;
-	int adc, i;
+	int adc, i, ret;
+	ret = 0;
 
 	if (!gpiod_get_value_cansleep(priv->gpio_headset_key))
 		return 0;
@@ -193,7 +193,6 @@ static int headset_key_check(void *data)
 		return 0;
 	}
 
-	/* TODO - Does this even work on downstream? */
 	for (i = 0; i < ARRAY_SIZE(headset_key_zones); i++) {
 		if (adc >= headset_key_zones[i].min_mv &&
 		    adc <= headset_key_zones[i].max_mv) {
@@ -215,7 +214,7 @@ static struct snd_soc_jack_gpio headset_gpio[] = {
 	{
 		.name = "Headset Key",
 		.report = SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2,
-		.debounce_time = 10,
+		.debounce_time = 30,
 		.jack_status_check = headset_key_check,
 	},
 };

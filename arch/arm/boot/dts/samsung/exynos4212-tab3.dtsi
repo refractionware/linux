@@ -312,7 +312,7 @@
 		lineout-sel-gpios = <&gpj1 2 GPIO_ACTIVE_HIGH>;
 
 		headset-detect-gpios = <&gpx0 4 GPIO_ACTIVE_LOW>;
-		headset-key-gpios = <&gpx3 6 GPIO_ACTIVE_HIGH>;
+		headset-key-gpios = <&gpx3 6 GPIO_ACTIVE_LOW>;
 		io-channel-names = "headset-detect";
 		io-channels = <&adc 0>;
 
@@ -526,11 +526,6 @@
 	wm1811: audio-codec@1a {
 		compatible = "wlf,wm1811";
 		reg = <0x1a>;
-		/*
-		 * CODEC_CLK32K; listed as coming from the same parent as
-		 * BT_WIFI and GPS, that being 32KHZ_PMIC.
-		 * (Not very descriptive...)
-		 */
 		clocks = <&pmu_system_controller 0>,
 			 <&s5m8767_osc S2MPS11_CLK_BT>;
 		clock-names = "MCLK1", "MCLK2";
