@@ -313,6 +313,8 @@
 
 		headset-detect-gpios = <&gpx0 4 GPIO_ACTIVE_LOW>;
 		headset-key-gpios = <&gpx3 6 GPIO_ACTIVE_LOW>;
+		headset-4pole-threshold-microvolt = <710 2000>;
+		headset-button-threshold-microvolt = <0 130 260>;
 		io-channel-names = "headset-detect";
 		io-channels = <&adc 0>;
 
