@@ -7,7 +7,9 @@
 
 #include <linux/clk.h>
 #include <linux/gpio/consumer.h>
+#include <linux/iio/consumer.h>
 #include <linux/mfd/wm8994/registers.h>
+#include <linux/input-event-codes.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regulator/consumer.h>
@@ -26,11 +28,16 @@
 #define MCLK2_RATE 32768U
 #define DEFAULT_FLL1_RATE 11289600U
 
+#define ADC_SAMPLE_SIZE 5
+
 struct midas_priv {
 	struct regulator *reg_mic_bias;
 	struct regulator *reg_submic_bias;
 	struct gpio_desc *gpio_fm_sel;
 	struct gpio_desc *gpio_lineout_sel;
+	struct gpio_desc *gpio_headset_detect;
+	struct gpio_desc *gpio_headset_key;
+	struct iio_channel *headset_detect_adc;
 	unsigned int fll1_rate;
 
 	struct snd_soc_jack headset_jack;
@@ -44,6 +51,150 @@ static struct snd_soc_jack_pin headset_jack_pins[] = {
 	{
 		.pin = "Headset Mic",
 		.mask = SND_JACK_MICROPHONE,
+	},
+};
+
+/*
+ * min_mv/max_mv values in this struct are set up based on DT values.
+ */
+static struct snd_soc_jack_zone headset_jack_zones[] = {
+	{ .jack_type = SND_JACK_HEADPHONE, },
+	{ .jack_type = SND_JACK_HEADSET, },
+	{ .jack_type = SND_JACK_HEADPHONE, },
+};
+
+/*
+ * This is used for manual detection in headset_key_check, we reuse the
+ * structure since it's convenient.
+ *
+ * min_mv/max_mv values in this struct are set up based on DT values.
+ */
+static struct snd_soc_jack_zone headset_key_zones[] = {
+	{ .jack_type = SND_JACK_BTN_0, },  /* Media */
+	{ .jack_type = SND_JACK_BTN_1, },  /* Volume Up */
+	{ .jack_type = SND_JACK_BTN_2, },  /* Volume Down */
+};
+
+static int headset_adc_read_debounced(struct iio_channel* headset_detect_adc)
+{
+	int adc, i, ret, retry_count;
+	int total = 0;
+	int min = 0;
+	int max = 0;
+
+	for (i = 0; i < ADC_SAMPLE_SIZE; i++) {
+		for (retry_count = 0; retry_count < 5; retry_count++) {
+			ret = iio_read_channel_processed(headset_detect_adc,
+							 &adc);
+			if (ret == 0)
+				break;
+
+			msleep(20);
+		}
+		if (retry_count == 4)
+			return ret;
+
+		if (i == 0) {
+			min = adc;
+			max = adc;
+		} else {
+			if (adc < min)
+				min = adc;
+			if (adc > max)
+				max = adc;
+		}
+
+		total += adc;
+	}
+
+	return (total - min - max) / (ADC_SAMPLE_SIZE - 2);
+}
+
+static int headset_jack_check(void *data)
+{
+	struct midas_priv *priv = (struct midas_priv *) data;
+	int time_left_ms = 300;
+	int adc, jack_type, ret;
+
+	while (time_left_ms > 0) {
+		if (!gpiod_get_value(priv->gpio_headset_detect)) {
+			return 0;
+		}
+		msleep(20);
+		time_left_ms -= 20;
+	}
+
+	/* Temporarily enable micbias for ADC measurement */
+	ret = regulator_enable(priv->reg_mic_bias);
+	if (ret)
+		pr_err("%s: Failed to enable micbias: %d\n", __func__, ret);
+
+	/* Sleep for a small amount of time to get the value to stabilize */
+	msleep(20);
+
+	adc = headset_adc_read_debounced(priv->headset_detect_adc);
+	if (adc < 0) {
+		pr_err("%s: Failed to read ADC, assuming headphones\n",
+		       __func__);
+		return SND_JACK_HEADPHONE;
+	}
+
+	pr_debug("%s: ADC value is %d\n", __func__, adc);
+	jack_type = snd_soc_jack_get_type(&priv->headset_jack, adc);
+
+	/* Disable micbias if the jack is not a headset */
+	if ((jack_type & SND_JACK_HEADSET) != SND_JACK_HEADSET) {
+		ret = regulator_disable(priv->reg_mic_bias);
+		if (ret)
+			pr_err("%s: Failed to disable micbias: %d\n",
+			       __func__, ret);
+	}
+
+	return jack_type;
+}
+
+static int headset_key_check(void *data)
+{
+	struct midas_priv *priv = (struct midas_priv *) data;
+	int adc, i;
+
+	if (!gpiod_get_value_cansleep(priv->gpio_headset_key))
+		return 0;
+
+	/* Filter out keypresses when 4 pole jack not detected */
+	if (!(priv->headset_jack.status & SND_JACK_MICROPHONE))
+		return 0;
+
+	adc = headset_adc_read_debounced(priv->headset_detect_adc);
+	if (adc < 0) {
+		pr_err("%s: Failed to read ADC, can't detect key type\n",
+		       __func__);
+		return 0;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(headset_key_zones); i++) {
+		if (adc >= headset_key_zones[i].min_mv &&
+		    adc <= headset_key_zones[i].max_mv) {
+			pr_debug("%s: ADC value is %d\n", __func__, adc);
+			return headset_key_zones[i].jack_type;
+		}
+	}
+
+	return 0;
+}
+
+static struct snd_soc_jack_gpio headset_gpio[] = {
+	{
+		.name = "Headset Jack",
+		.report = SND_JACK_HEADSET,
+		.debounce_time = 30,
+		.jack_status_check = headset_jack_check,
+	},
+	{
+		.name = "Headset Key",
+		.report = SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2,
+		.debounce_time = 30,
+		.jack_status_check = headset_key_check,
 	},
 };
 
@@ -318,18 +469,85 @@ static int midas_late_probe(struct snd_soc_card *card)
 		return ret;
 	}
 
-	ret = snd_soc_card_jack_new_pins(card, "Headset",
-					 SND_JACK_HEADSET | SND_JACK_MECHANICAL |
-					 SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 |
-					 SND_JACK_BTN_3 | SND_JACK_BTN_4 | SND_JACK_BTN_5,
-					 &priv->headset_jack,
-					 headset_jack_pins,
-					 ARRAY_SIZE(headset_jack_pins));
-	if (ret)
-		return ret;
+	if (!priv->gpio_headset_detect) {
+		ret = snd_soc_card_jack_new_pins(card, "Headset",
+				 SND_JACK_HEADSET | SND_JACK_MECHANICAL |
+				 SND_JACK_BTN_0 | SND_JACK_BTN_1 |
+				 SND_JACK_BTN_2 | SND_JACK_BTN_3 |
+				 SND_JACK_BTN_4 | SND_JACK_BTN_5,
+				 &priv->headset_jack,
+				 headset_jack_pins,
+				 ARRAY_SIZE(headset_jack_pins));
+		if (ret)
+			return ret;
 
-	wm8958_mic_detect(aif1_dai->component, &priv->headset_jack,
-			  NULL, NULL, NULL, NULL);
+		wm8958_mic_detect(aif1_dai->component, &priv->headset_jack,
+			  	NULL, NULL, NULL, NULL);
+	} else {
+		/* Some devices (n8000, t310) use a GPIO to detect the jack. */
+		snd_soc_dapm_force_enable_pin(&card->dapm, "AIF1CLK");
+
+		ret = snd_soc_card_jack_new_pins(card, "Headset",
+				SND_JACK_HEADSET | SND_JACK_BTN_0 |
+				SND_JACK_BTN_1 | SND_JACK_BTN_2,
+				&priv->headset_jack,
+				headset_jack_pins,
+				ARRAY_SIZE(headset_jack_pins));
+		if (ret) {
+			dev_err(card->dev,
+				"Failed to set up headset pins: %d\n", ret);
+			return ret;
+		}
+
+		ret = snd_soc_jack_add_zones(&priv->headset_jack,
+				ARRAY_SIZE(headset_jack_zones),
+				headset_jack_zones);
+		if (ret) {
+			dev_err(card->dev,
+				"Failed to set up headset zones: %d\n", ret);
+			return ret;
+		}
+
+		headset_gpio[0].data = priv;
+		headset_gpio[0].desc = priv->gpio_headset_detect;
+
+		headset_gpio[1].data = priv;
+		headset_gpio[1].desc = priv->gpio_headset_key;
+
+		snd_jack_set_key(priv->headset_jack.jack,
+				 SND_JACK_BTN_0, KEY_MEDIA);
+		snd_jack_set_key(priv->headset_jack.jack,
+				 SND_JACK_BTN_1, KEY_VOLUMEUP);
+		snd_jack_set_key(priv->headset_jack.jack,
+				 SND_JACK_BTN_2, KEY_VOLUMEDOWN);
+
+		ret = snd_soc_jack_add_gpios(&priv->headset_jack,
+				ARRAY_SIZE(headset_gpio),
+				headset_gpio);
+		if (ret)
+			dev_err(card->dev,
+				"Failed to set up headset jack GPIOs: %d\n",
+				ret);
+
+		return ret;
+	}
+
+	return 0;
+}
+
+static int midas_suspend_pre(struct snd_soc_card *card) {
+	struct midas_priv *priv = snd_soc_card_get_drvdata(card);
+
+	if (priv->gpio_headset_detect)
+		return snd_soc_dapm_disable_pin(&card->dapm, "AIF1CLK");
+	return 0;
+}
+
+static int midas_resume_post(struct snd_soc_card *card) {
+	struct midas_priv *priv = snd_soc_card_get_drvdata(card);
+
+	if (priv->gpio_headset_detect)
+		return snd_soc_dapm_force_enable_pin(&card->dapm, "AIF1CLK");
 	return 0;
 }
 
@@ -427,6 +645,9 @@ static struct snd_soc_card midas_card = {
 
 	.set_bias_level = midas_set_bias_level,
 	.late_probe = midas_late_probe,
+
+	.suspend_pre = midas_suspend_pre,
+	.resume_post = midas_resume_post,
 };
 
 static int midas_probe(struct platform_device *pdev)
@@ -436,6 +657,9 @@ static int midas_probe(struct platform_device *pdev)
 	struct snd_soc_card *card = &midas_card;
 	struct device *dev = &pdev->dev;
 	static struct snd_soc_dai_link *dai_link;
+	enum iio_chan_type channel_type;
+	u32 fourpole_threshold[2];
+	u32 button_threshold[3];
 	struct midas_priv *priv;
 	int ret, i;
 
@@ -474,6 +698,91 @@ static int midas_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->gpio_lineout_sel)) {
 		dev_err(dev, "Failed to get line out selection GPIO\n");
 		return PTR_ERR(priv->gpio_lineout_sel);
+	}
+
+	priv->gpio_headset_detect = devm_gpiod_get_optional(dev,
+				"headset-detect", GPIOD_IN);
+	if (IS_ERR(priv->gpio_headset_detect)) {
+		dev_err(dev, "Failed to get headset jack detect GPIO\n");
+		return PTR_ERR(priv->gpio_headset_detect);
+	}
+
+	if (priv->gpio_headset_detect) {
+		priv->headset_detect_adc = devm_iio_channel_get(dev,
+							"headset-detect");
+		if (IS_ERR(priv->headset_detect_adc)) {
+			dev_err(dev, "Failed to get ADC channel\n");
+			return PTR_ERR(priv->headset_detect_adc);
+		}
+
+		ret = iio_get_channel_type(priv->headset_detect_adc,
+					   &channel_type);
+		if (ret) {
+			dev_err(dev, "Failed to get ADC channel type\n");
+			return ret;
+		}
+
+		if (channel_type != IIO_VOLTAGE) {
+			dev_err(dev, "ADC channel is not voltage\n");
+			return ret;
+		}
+
+		priv->gpio_headset_key = devm_gpiod_get(dev, "headset-key",
+							GPIOD_IN);
+		if (IS_ERR(priv->gpio_headset_key)) {
+			dev_err(dev, "Failed to get headset key gpio\n");
+			return PTR_ERR(priv->gpio_headset_key);
+		}
+
+		ret = of_property_read_u32_array(dev->of_node,
+				"headset-4pole-threshold-microvolt",
+				fourpole_threshold,
+				ARRAY_SIZE(fourpole_threshold));
+		if (ret) {
+			dev_err(dev, "Failed to get 4-pole jack detection threshold\n");
+			return ret;
+		}
+
+		if (fourpole_threshold[0] > fourpole_threshold[1]) {
+			dev_err(dev, "Invalid 4-pole jack detection threshold value\n");
+			return -EINVAL;
+		}
+
+		headset_jack_zones[0].max_mv = (fourpole_threshold[0]);
+		headset_jack_zones[1].min_mv = (fourpole_threshold[0] + 1);
+
+		headset_jack_zones[1].max_mv = (fourpole_threshold[1]);
+		headset_jack_zones[2].min_mv = (fourpole_threshold[1] + 1);
+
+		ret = of_property_read_u32_array(dev->of_node,
+				"headset-button-threshold-microvolt",
+				button_threshold,
+				ARRAY_SIZE(button_threshold));
+		if (ret) {
+			dev_err(dev, "Failed to get headset button detection threshold\n");
+			return ret;
+		}
+
+		if (button_threshold[0] > button_threshold[1] ||
+		    button_threshold[1] > button_threshold[2]) {
+			dev_err(dev, "Invalid headset button detection threshold value\n");
+			return -EINVAL;
+		}
+
+		for (i = 0; i < 3; i++) {
+			if (i != 0 && button_threshold[i] <= 0) {
+				dev_err(dev, "Invalid headset button detection threshold value\n");
+				return -EINVAL;
+			}
+
+			headset_key_zones[i].min_mv = button_threshold[i];
+
+			if (i == 2)
+				headset_key_zones[i].max_mv = UINT_MAX;
+			else
+				headset_key_zones[i].max_mv = \
+						(button_threshold[i+1] - 1);
+		}
 	}
 
 	ret = snd_soc_of_parse_card_name(card, "model");
