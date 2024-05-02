@@ -82,15 +82,12 @@ static int headset_adc_read_debounced(struct iio_channel* headset_detect_adc)
 	int min = 0;
 	int max = 0;
 
-	pr_info("DEBUG: ADC read begin\n");
-
 	for (i = 0; i < ADC_SAMPLE_SIZE; i++) {
 		for (retry_count = 0; retry_count < 5; retry_count++) {
 			ret = iio_read_channel_processed(headset_detect_adc,
 							 &adc);
 			if (ret == 0)
 				break;
-			pr_info("DEBUG: Had to retry ADC read at %d\n", i);
 
 			msleep(20);
 		}
@@ -106,8 +103,6 @@ static int headset_adc_read_debounced(struct iio_channel* headset_detect_adc)
 			if (adc > max)
 				max = adc;
 		}
-
-		pr_info("DEBUG: (%d) read %d, min %d max %d\n", i, adc, min, max);
 
 		total += adc;
 	}
@@ -144,7 +139,7 @@ static int headset_jack_check(void *data)
 		return SND_JACK_HEADPHONE;
 	}
 
-	pr_info("%s: ADC value is %d\n", __func__, adc);
+	pr_debug("%s: ADC value is %d\n", __func__, adc);
 	jack_type = snd_soc_jack_get_type(&priv->headset_jack, adc);
 
 	/* Disable micbias if the jack is not a headset */
@@ -161,8 +156,7 @@ static int headset_jack_check(void *data)
 static int headset_key_check(void *data)
 {
 	struct midas_priv *priv = (struct midas_priv *) data;
-	int adc, i, ret;
-	ret = 0;
+	int adc, i;
 
 	if (!gpiod_get_value_cansleep(priv->gpio_headset_key))
 		return 0;
@@ -181,7 +175,7 @@ static int headset_key_check(void *data)
 	for (i = 0; i < ARRAY_SIZE(headset_key_zones); i++) {
 		if (adc >= headset_key_zones[i].min_mv &&
 		    adc <= headset_key_zones[i].max_mv) {
-			pr_info("%s: ADC value is %d\n", __func__, adc);
+			pr_debug("%s: ADC value is %d\n", __func__, adc);
 			return headset_key_zones[i].jack_type;
 		}
 	}
