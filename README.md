@@ -17,7 +17,7 @@ Sometimes though, I'll push some updates here. (This will probably also become m
 - `tab3/6.5.1`: old stable, based off exynos4-mainline Linux 6.5.1 kernel. Deprecated.
 - `tab3/6.7.6`: new stable, based off exynos4-mainline Linux 6.7.6 kernel.
 - `tab3/wip-otg`: Patch for MAX77689 MFD to 1. fix cable detection and 2. enable OTG. Does not handle OTG power yet. Also doesn't have working peripheral/OTG switching. Also also is missing at least one commit, be warned. This one should be re-done from scratch...
-- `tab3/headset-detect`: WIP branch for headset detection.
+- `tab3/headset-detect`: WIP branch for headset detection. Final patches being prepared in `b4/midas-wm1811-gpio-jack`.
 
 ## baffinlite/*
 
@@ -43,4 +43,4 @@ Branches where I prepare patchsets for submission, and try to figure out the ord
 
 Patches as they are submitted to the mailing list. See the list below for the branches accompanied by relevant lore links:
 
-*No such branches at the moment.*
+* `b4/midas-wm1811-gpio-jack` - upstreaming for `tab3/headset-detect` branch (contains the latest version of those patches!)
