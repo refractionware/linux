@@ -77,6 +77,9 @@ static int max77693_chg_get_current_limit(struct regulator_dev *rdev)
 	if (val > chg_max_uA)
 		return -EINVAL;
 
+	pr_info("charger regulator current limit: %u (0x%x), min %u max %u\n",
+		val, sel, chg_min_uA, chg_max_uA);
+
 	return val;
 }
 

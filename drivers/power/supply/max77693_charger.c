@@ -214,8 +214,8 @@ static int max77693_get_input_current_limit(struct max77693_charger *chg,
 					    int *val)
 {
 	struct regmap *regmap = chg->max77693->regmap;
-	unsigned int data, cc, chgin;
-	int ret;
+	unsigned int data, cc;
+	int chgin, ret;
 
 	ret = regmap_read(regmap, MAX77693_CHG_REG_CHG_CNFG_02, &data);
 	if (ret < 0)
@@ -234,6 +234,8 @@ static int max77693_get_input_current_limit(struct max77693_charger *chg,
 	chgin = regulator_get_current_limit(chg->regu);
 	if (chgin < 0)
 		return chgin;
+
+	dev_info(chg->dev, "CC %u (0x%x), CHGIN %d\n", cc, data & CHG_CNFG_02_CC_MASK, chgin);
 
 	if (cc < chgin)
 		*val = cc;
@@ -608,7 +610,8 @@ static int max77693_set_fast_charge_current(struct max77693_charger *chg,
 		return -EINVAL;
 	}
 
-	dev_dbg(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
+	// dev_dbg(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
+	dev_info(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
 
 	return regmap_update_bits(chg->max77693->regmap,
 			MAX77693_CHG_REG_CHG_CNFG_02,
