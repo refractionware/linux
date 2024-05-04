@@ -4,7 +4,7 @@ Welcome to my humble Linux fork. You're probably here because you're curious abo
 
 This README contains a general explaination of each of the branches within.
 
-**Beware!** I prune old branches every once in a while to keep the repo uncluttered. Usually these don't contain anything interesting, I try to carry my patches across versions, but if you plan to link directly to something in these repos, maybe reconsider. Thanks!
+**Beware!** I prune old branches every once in a while to keep the repo uncluttered. Usually these don't contain anything interesting, I try to carry my patches across versions, but if you plan to link directly to something in these repos, consider mirroring it elsewhere. Thanks!
 
 ## tab3/*
 
