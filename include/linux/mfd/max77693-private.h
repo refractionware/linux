@@ -218,6 +218,7 @@ enum max77693_charger_battery_state {
 #define CHG_CNFG_01_PQEN_MAKS		BIT(CHG_CNFG_01_PQEN_SHIFT)
 
 /* MAX77693_CHG_REG_CHG_CNFG_02 register */
+#define CHG_CNFG_02_CC_SHIFT		0
 #define CHG_CNFG_02_CC_MASK		0x3F
 
 /* MAX77693_CHG_REG_CHG_CNFG_03 register */
