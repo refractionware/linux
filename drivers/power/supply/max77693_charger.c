@@ -763,6 +763,17 @@ static int max77693_reg_init(struct max77693_charger *chg)
 	if (ret)
 		return ret;
 
+	/*
+	 * Set CHARGER regulator current limit to match fast charge current,
+	 * otherwise it defaults to the lowest possible value and limits our
+	 * current
+	 */
+	ret = regulator_set_current_limit(chg->regu,
+					  chg->fast_charge_current,
+					  chg->fast_charge_current);
+	if (ret)
+		return ret;
+
 	return max77693_set_charge_input_threshold_volt(chg,
 			chg->charge_input_threshold_volt);
 }
