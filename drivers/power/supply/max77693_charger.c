@@ -210,48 +210,12 @@ static int max77693_get_online(struct regmap *regmap, int *val)
 	return 0;
 }
 
-static int max77693_get_input_current_limit(struct max77693_charger *chg,
-					    int *val)
-{
-	struct regmap *regmap = chg->max77693->regmap;
-	unsigned int data, cc;
-	int chgin, ret;
-
-	ret = regmap_read(regmap, MAX77693_CHG_REG_CHG_CNFG_02, &data);
-	if (ret < 0)
-		return ret;
-
-	/*
-	 * There are two current limit variables - one is the fast charge
-	 * current limit, the other is the CHGIN input limit (managed by
-	 * the CHARGER regulator). If the fast charge current limit is
-	 * smaller than the CHGIN input limit, return the smaller value.
-	 */
-
-	cc = ((data << CHG_CNFG_02_CC_SHIFT) & CHG_CNFG_02_CC_MASK);
-	cc = (cc * 333 / 10) * 1000; /* 3 steps/0.1A */
-
-	chgin = regulator_get_current_limit(chg->regu);
-	if (chgin < 0)
-		return chgin;
-
-	dev_info(chg->dev, "CC %u (0x%x), CHGIN %d\n", cc, data & CHG_CNFG_02_CC_MASK, chgin);
-
-	if (cc < chgin)
-		*val = cc;
-	else
-		*val = chgin;
-
-	return 0;
-}
-
 static enum power_supply_property max77693_charger_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 };
@@ -279,9 +243,6 @@ static int max77693_charger_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		ret = max77693_get_online(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = max77693_get_input_current_limit(chg, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = max77693_charger_model;
