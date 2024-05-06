@@ -601,7 +601,7 @@ static int max77693_set_batttery_overcurrent(struct max77693_charger *chg,
 			CHG_CNFG_12_B2SOVRC_MASK, data);
 }
 
-static int max77693_set_fast_charge_current(struct max77693_charger *chg,
+static int max77693_set_charge_current(struct max77693_charger *chg,
 		unsigned int uamp)
 {
 	unsigned int data;
@@ -614,12 +614,17 @@ static int max77693_set_fast_charge_current(struct max77693_charger *chg,
 		return -EINVAL;
 	}
 
-	// dev_dbg(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
-	dev_info(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
+	dev_dbg(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
 
 	return regmap_update_bits(chg->max77693->regmap,
 			MAX77693_CHG_REG_CHG_CNFG_02,
 			CHG_CNFG_02_CC_MASK, data);
+}
+
+static int max77693_set_input_current(struct max77693_charger *chg,
+		unsigned int uamp)
+{
+	return regulator_set_current_limit(chg->regu, uamp, uamp);
 }
 
 static int max77693_set_charge_input_threshold_volt(struct max77693_charger *chg,
@@ -699,21 +704,6 @@ static int max77693_reg_init(struct max77693_charger *chg)
 	if (ret)
 		return ret;
 
-	ret = max77693_set_fast_charge_current(chg, chg->fast_charge_current);
-	if (ret)
-		return ret;
-
-	/*
-	 * Set CHARGER regulator current limit to match fast charge current,
-	 * otherwise it defaults to the lowest possible value and limits our
-	 * current
-	 */
-	ret = regulator_set_current_limit(chg->regu,
-					  chg->fast_charge_current,
-					  chg->fast_charge_current);
-	if (ret)
-		return ret;
-
 	return max77693_set_charge_input_threshold_volt(chg,
 			chg->charge_input_threshold_volt);
 }
@@ -770,6 +760,7 @@ static void max77693_charger_extcon_work(struct work_struct *work)
 						  cable.work);
 	struct extcon_dev *edev = chg->cable.edev;
 	bool set_charging, set_otg;
+	unsigned int charge_current, input_current;
 	int connector, state;
 	int ret;
 
@@ -782,22 +773,34 @@ static void max77693_charger_extcon_work(struct work_struct *work)
 
 	switch (connector) {
 	case EXTCON_CHG_USB_SDP:
+	case EXTCON_CHG_USB_SLOW:
+		set_charging = true;
+		set_otg = false;
+		charge_current = 500000; /* 500 mA */
+		input_current = 500000; /* 500 mA */
+
+		dev_info(chg->dev, "slow charging. connector type: %d\n",
+			 connector);
+		break;
 	case EXTCON_CHG_USB_DCP:
 	case EXTCON_CHG_USB_CDP:
 	case EXTCON_CHG_USB_ACA:
 	case EXTCON_CHG_USB_FAST:
-	case EXTCON_CHG_USB_SLOW:
 	case EXTCON_CHG_WPT:
 	case EXTCON_CHG_USB_PD:
 		set_charging = true;
 		set_otg = false;
+		charge_current = chg->fast_charge_current;
+		input_current = chg->fast_charge_current;
 
-		dev_info(chg->dev, "charging. connector type: %d\n",
+		dev_info(chg->dev, "fast charging. connector type: %d\n",
 			 connector);
 		break;
 	case EXTCON_USB_HOST:
 		set_charging = false;
 		set_otg = true;
+		charge_current = 500000; /* 500 mA */
+		input_current = 500000; /* 500 mA */
 
 		dev_info(chg->dev, "USB host. connector type: %d\n",
 			 connector);
@@ -805,16 +808,26 @@ static void max77693_charger_extcon_work(struct work_struct *work)
 	default:
 		set_charging = false;
 		set_otg = false;
+		charge_current = 0;
+		input_current = 500000; /* 500 mA */
 
 		dev_info(chg->dev, "disconnected. connector type: %d\n",
 			 connector);
 		break;
 	}
 
-	/*
-	 * The functions below already check if the change is necessary,
-	 * so we don't need to do so here.
-	 */
+	ret = max77693_set_charge_current(chg, charge_current);
+	if (ret) {
+		dev_err(chg->dev, "failed to set charge current (%d)\n", ret);
+		goto out;
+	}
+
+	ret = max77693_set_input_current(chg, input_current);
+	if (ret) {
+		dev_err(chg->dev, "failed to set input current (%d)\n", ret);
+		goto out;
+	}
+
 	ret = max77693_set_charging(chg, set_charging);
 	if (ret) {
 		dev_err(chg->dev, "failed to set charging (%d)\n", ret);
