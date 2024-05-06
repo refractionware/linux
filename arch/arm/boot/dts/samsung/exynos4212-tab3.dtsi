@@ -157,6 +157,17 @@
 				};
 			};
 
+			muic {
+				compatible = "maxim,max77693-muic";
+
+				usb_conn: connector {
+					compatible = "samsung,usb-connector-11pin",
+						     "usb-b-connector";
+					label = "micro-USB";
+					type = "micro";
+				};
+			};
+
 			charger {
 				compatible = "maxim,max77693-charger";
 
@@ -165,6 +176,9 @@
 				maxim,thermal-regulation-celsius = <100>;
 				maxim,battery-overcurrent-microamp = <3500000>;
 				maxim,charge-input-threshold-microvolt = <4300000>;
+				maxim,fast-charge-current-microamp = <1800000>;
+
+				maxim,usb-connector = <&usb_conn>;
 			};
 		};
 	};
@@ -450,6 +464,10 @@
 		backlight = <&backlight>;
 	};
 };
+
+/*&ehci {
+	status = "okay";
+};*/
 
 &exynos_usbphy {
 	vbus-supply = <&esafeout1_reg>;
@@ -843,6 +861,10 @@
 	mmc-ddr-1_8v;
 	status = "okay";
 };
+
+/*&ohci {
+	status = "okay";
+};*/
 
 &pinctrl_0 {
 	pinctrl-names = "default";
