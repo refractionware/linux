@@ -267,6 +267,28 @@ static void exynos4x12_power_on_int(struct samsung_usb2_phy_instance *inst)
 	exynos4x12_phy_pwr(inst, 1);
 }
 
+static int exynos4x12_get_mode_switch(struct samsung_usb2_phy_driver *drv)
+{
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET, &val);
+	if (ret)
+		return ret;
+
+	val &= EXYNOS_4x12_MODE_SWITCH_MASK;
+
+	return val;
+}
+
+static int exynos4x12_set_mode_switch(struct samsung_usb2_phy_driver *drv,
+				      unsigned int val)
+{
+	return regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
+					EXYNOS_4x12_MODE_SWITCH_MASK,
+					val);
+}
+
 static int exynos4x12_power_on(struct samsung_usb2_phy_instance *inst)
 {
 	struct samsung_usb2_phy_driver *drv = inst->drv;
@@ -369,6 +391,8 @@ const struct samsung_usb2_phy_config exynos3250_usb2_phy_config = {
 
 const struct samsung_usb2_phy_config exynos4x12_usb2_phy_config = {
 	.has_mode_switch	= 1,
+	.get_mode_switch	= exynos4x12_get_mode_switch,
+	.set_mode_switch	= exynos4x12_set_mode_switch,
 	.num_phys		= EXYNOS4x12_NUM_PHYS,
 	.phys			= exynos4x12_phys,
 	.rate_to_clk		= exynos4x12_rate_to_clk,

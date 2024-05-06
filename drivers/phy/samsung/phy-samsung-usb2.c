@@ -101,6 +101,44 @@ static struct phy *samsung_usb2_phy_xlate(struct device *dev,
 	return drv->instances[args->args[0]].phy;
 }
 
+#ifdef CONFIG_PHY_EXYNOS4X12_USB2
+static ssize_t phy_mode_switch_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct samsung_usb2_phy_driver *drv = dev_get_drvdata(dev);
+	int val = -1;
+
+	if (drv->cfg->has_mode_switch)
+		val = drv->cfg->get_mode_switch(drv);
+
+	return sysfs_emit(buf, "%u\n", val);
+}
+
+static ssize_t phy_mode_switch_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct samsung_usb2_phy_driver *drv = dev_get_drvdata(dev);
+	unsigned long val;
+	int ret;
+
+	if (!drv->cfg->has_mode_switch) {
+		return count;
+	}
+
+	ret = kstrtoul(buf, 10, &val);
+	if (ret)
+		return ret;
+
+	ret = drv->cfg->set_mode_switch(drv, val);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(phy_mode_switch);
+#endif
+
 static const struct of_device_id samsung_usb2_phy_of_match[] = {
 #ifdef CONFIG_PHY_EXYNOS4X12_USB2
 	{
@@ -240,6 +278,12 @@ static int samsung_usb2_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy_provider)) {
 		dev_err(drv->dev, "Failed to register phy provider\n");
 		return PTR_ERR(phy_provider);
+	}
+
+	ret = device_create_file(dev, &dev_attr_phy_mode_switch);
+	if (ret) {
+		dev_err(drv->dev, "Failed to create PHY mode switch sysfs entry\n");
+		return ret;
 	}
 
 	return 0;

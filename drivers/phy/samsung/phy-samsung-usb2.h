@@ -59,6 +59,8 @@ struct samsung_usb2_phy_config {
 	int (*rate_to_clk)(unsigned long, u32 *);
 	unsigned int num_phys;
 	bool has_mode_switch;
+	int (*get_mode_switch)(struct samsung_usb2_phy_driver *);
+	int (*set_mode_switch)(struct samsung_usb2_phy_driver *, unsigned int);
 	bool has_refclk_sel;
 };
 
