@@ -290,7 +290,7 @@ static int s6d7aa0_lsl080al02_off(struct s6d7aa0 *ctx)
 }
 
 static const struct drm_display_mode s6d7aa0_lsl080al02_mode = {
-	.clock = (800 + 16 + 4 + 140) * (1280 + 8 + 4 + 4) * 60 / 1000,
+	.clock = (800 + 16 + 4 + 140) * (1280 + 8 + 4 + 4) * 58 / 1000,
 	.hdisplay = 800,
 	.hsync_start = 800 + 16,
 	.hsync_end = 800 + 16 + 4,
