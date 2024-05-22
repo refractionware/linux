@@ -29,7 +29,6 @@
 #define DEFAULT_FLL1_RATE 11289600U
 
 struct midas_priv {
-	struct regulator *reg_headset_mic_bias;
 	struct gpio_desc *gpio_fm_sel;
 	struct gpio_desc *gpio_lineout_sel;
 	struct gpio_desc *gpio_headset_detect;
@@ -301,25 +300,6 @@ static int midas_ext_spkmode(struct snd_soc_dapm_widget *w,
 	return ret;
 }
 
-static int midas_headset_mic_bias(struct snd_soc_dapm_widget *w,
-			     struct snd_kcontrol *kcontrol, int event)
-{
-	struct snd_soc_card *card = w->dapm->card;
-	struct midas_priv *priv = snd_soc_card_get_drvdata(card);
-
-	if (!priv->reg_headset_mic_bias)
-		return 0;
-
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		return regulator_enable(priv->reg_headset_mic_bias);
-	case SND_SOC_DAPM_POST_PMD:
-		return regulator_disable(priv->reg_headset_mic_bias);
-	}
-
-	return 0;
-}
-
 static int midas_fm_set(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *kcontrol, int event)
 {
@@ -390,7 +370,8 @@ static const struct snd_soc_dapm_widget midas_dapm_widgets[] = {
 	SND_SOC_DAPM_LINE("FM In", midas_fm_set),
 
 	SND_SOC_DAPM_HP("Headphone", NULL),
-	SND_SOC_DAPM_MIC("Headset Mic", midas_headset_mic_bias),
+	SND_SOC_DAPM_MIC("Headset Mic", NULL),
+	SND_SOC_DAPM_REGULATOR_SUPPLY("headset-mic-bias", 0, 0),
 	SND_SOC_DAPM_MIC("Main Mic", NULL),
 	SND_SOC_DAPM_REGULATOR_SUPPLY("mic-bias", 0, 0),
 	SND_SOC_DAPM_MIC("Sub Mic", NULL),
@@ -402,6 +383,7 @@ static const struct snd_soc_dapm_route midas_dapm_routes[] = {
 	/* Bind microphones with their respective regulator supplies */
 	{"Main Mic", NULL, "mic-bias"},
 	{"Sub Mic", NULL, "submic-bias"},
+	{"Headset Mic", NULL, "headset-mic-bias"},
 };
 
 static int midas_set_bias_level(struct snd_soc_card *card,
@@ -624,17 +606,6 @@ static int midas_probe(struct platform_device *pdev)
 
 	snd_soc_card_set_drvdata(card, priv);
 	card->dev = dev;
-
-	priv->reg_headset_mic_bias = devm_regulator_get_optional(dev,
-							    "headset-mic-bias");
-	if (IS_ERR(priv->reg_headset_mic_bias)) {
-		ret = PTR_ERR(priv->reg_headset_mic_bias);
-		if (ret == -ENODEV)
-			priv->reg_headset_mic_bias = NULL;
-		else
-			return dev_err_probe(dev, ret,
-				     "Failed to get headset mic bias regulator\n");
-	}
 
 	priv->gpio_fm_sel = devm_gpiod_get_optional(dev, "fm-sel", GPIOD_OUT_HIGH);
 	if (IS_ERR(priv->gpio_fm_sel))
