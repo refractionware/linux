@@ -73,36 +73,23 @@ static struct snd_soc_jack_zone headset_key_zones[] = {
 
 static int headset_jack_check(void *data)
 {
-	struct midas_priv *priv = (struct midas_priv *) data;
+	struct snd_soc_component *codec = data;
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(codec);
+	struct midas_priv *priv = snd_soc_card_get_drvdata(codec->card);
 	int adc, ret;
-	int bias_already_on = 0;
 	int jack_type = 0;
 
 	if (!gpiod_get_value_cansleep(priv->gpio_headset_detect))
 		return 0;
 
-	if (priv->reg_headset_mic_bias) {
-		/*
-		 * Get state of Headset Mic switch by checking the headset mic
-		 * bias regulator
-		 */
-		bias_already_on = \
-			regulator_is_enabled(priv->reg_headset_mic_bias);
-
-		/*
-		 * If it's not enabled yet, temporarily enable headset mic bias
-		 * for ADC measurement
-		 */
-		if (bias_already_on < 0)
-			pr_err("%s: Failed to get headset mic bias state: %d",
-			       __func__, ret);
-		else if (!bias_already_on) {
-			ret = regulator_enable(priv->reg_headset_mic_bias);
-			if (ret)
-				pr_err("%s: Failed to enable micbias: %d\n",
-				       __func__, ret);
-		}
+	/* Enable headset mic bias regulator so that the ADC reading works */
+	ret = snd_soc_dapm_force_enable_pin(dapm, "headset-mic-bias");
+	if (ret < 0) {
+		pr_err("%s: Failed to enable headset mic bias regulator (%d), assuming headphones\n",
+		       __func__, ret);
+		return SND_JACK_HEADPHONE;
 	}
+	snd_soc_dapm_sync(dapm);
 
 	/* Sleep for a small amount of time to get the value to stabilize */
 	msleep(20);
@@ -119,23 +106,19 @@ static int headset_jack_check(void *data)
 	jack_type = snd_soc_jack_get_type(&priv->headset_jack, adc);
 
 out:
-	/*
-	 * Revert the headset mic bias supply to its previous state
-	 * (i.e. if it was disabled before the check, disable it again)
-	 */
-	if (priv->reg_headset_mic_bias && bias_already_on == 0) {
-		ret = regulator_disable(priv->reg_headset_mic_bias);
-		if (ret)
-			pr_err("%s: Failed to disable micbias: %d\n",
-			       __func__, ret);
-	}
+	ret = snd_soc_dapm_disable_pin(dapm, "headset-mic-bias");
+	if (ret < 0)
+		pr_err("%s: Failed to disable headset mic bias regulator (%d)\n",
+		       __func__, ret);
+	snd_soc_dapm_sync(dapm);
 
 	return jack_type;
 }
 
 static int headset_key_check(void *data)
 {
-	struct midas_priv *priv = (struct midas_priv *) data;
+	struct snd_soc_component *codec = data;
+	struct midas_priv *priv = snd_soc_card_get_drvdata(codec->card);
 	int adc, i, ret;
 
 	if (!gpiod_get_value_cansleep(priv->gpio_headset_key))
@@ -462,10 +445,10 @@ static int midas_late_probe(struct snd_soc_card *card)
 			return ret;
 		}
 
-		headset_gpio[0].data = priv;
+		headset_gpio[0].data = aif1_dai->component;
 		headset_gpio[0].desc = priv->gpio_headset_detect;
 
-		headset_gpio[1].data = priv;
+		headset_gpio[1].data = aif1_dai->component;
 		headset_gpio[1].desc = priv->gpio_headset_key;
 
 		snd_jack_set_key(priv->headset_jack.jack,
