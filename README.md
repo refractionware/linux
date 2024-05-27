@@ -45,3 +45,4 @@ Branches where I prepare patchsets for submission, and try to figure out the ord
 Patches as they are submitted to the mailing list. See the list below for the branches accompanied by relevant lore links:
 
 * `b4/midas-wm1811-gpio-jack`: upstreaming for `tab3/headset-detect` branch (contains the latest version of those patches!)
+* `b4/max77693-charger-extcon`: upstreaming for the charger parts of `tab3/otg-take-2` (contains the latest version of those patches!); coming soon to a mailing list near you ;)
