@@ -11,7 +11,8 @@ This README contains a general explaination of each of the branches within.
 Patches as they are submitted to the mailing list; contain the most up-to-date and working versions of patches.
 
 * `b4/midas-wm1811-gpio-jack`: upstreaming for `tab3/headset-detect` branch (contains the latest version of those patches!); currently on v4, https://lists.sr.ht/~postmarketos/upstreaming/patches/52939
-* `b4/max77693-charger-extcon`: upstreaming for the charger parts of `tab3/otg-take-2` (contains the latest version of those patches!); coming soon to a mailing list near you ;)
+* `b4/max77693-charger-extcon`: upstreaming for the charger parts of `tab3/otg-take-2` (contains the latest version of those patches!); currently on v1 (v2 WIP is being pushed here), https://lists.sr.ht/~postmarketos/upstreaming/patches/53020
+* `b4/bcm21664-common`: "ARM: dts: bcm-mobile: Split out nodes used by both BCM21664 and BCM23550"; currently on v1, https://lists.sr.ht/~postmarketos/upstreaming/%3C20240605-bcm21664-common-v1-0-6386e9141eb6@gmail.com%3E (did not get detected as a patch for some reason?)
 
 ## tab3/*
 
@@ -29,7 +30,7 @@ Some of these branches are pushed to https://gitlab.com/knuxify/linux, which is 
 
 Branches containing work-in-progress code for Broadcom Kona support. Stable branches reside on the [bcm-kona-mainline/linux](https://github.com/bcm-kona-mainline/linux) repo.
 
-*No such branches at the moment.*
+- `baffinlite/6.9`: current "in-dev" tree for the Grand Neo, slowly rebasing all the patches again (this time upstreaming them all on the way), coming soon to a bcm-kona-mainline/linux near you ;)
 
 ## wip/*
 
