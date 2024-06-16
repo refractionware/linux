@@ -831,7 +831,7 @@ static void dwc2_get_host_hwparams(struct dwc2_hsotg *hsotg)
 	u32 gnptxfsiz;
 	u32 hptxfsiz;
 
-	if (hsotg->dr_mode == USB_DR_MODE_PERIPHERAL)
+	if (hsotg->dr_mode == USB_DR_MODE_PERIPHERAL || hsotg->host_companion)
 		return;
 
 	dwc2_force_mode(hsotg, true);

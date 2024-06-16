@@ -869,6 +869,8 @@ struct dwc2_hregs_backup {
  * @vbus_supply:        Regulator supplying vbus.
  * @usb33d:		Optional 3.3v regulator used on some stm32 devices to
  *			supply ID and VBUS detection hardware.
+ * @host_companion:	Optional companion host controller used on devices
+ * 			where the DWC2 controller doesn't support host mode.
  * @lock:		Spinlock that protects all the driver data structures
  * @priv:		Stores a pointer to the struct usb_hcd
  * @queuing_high_bandwidth: True if multiple packets of a high-bandwidth
@@ -1061,6 +1063,7 @@ struct dwc2_hsotg {
 	struct regulator_bulk_data supplies[DWC2_NUM_SUPPLIES];
 	struct regulator *vbus_supply;
 	struct regulator *usb33d;
+	struct device *host_companion;
 
 	spinlock_t lock;
 	void *priv;

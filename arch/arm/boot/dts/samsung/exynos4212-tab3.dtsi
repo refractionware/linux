@@ -165,6 +165,19 @@
 						     "usb-b-connector";
 					label = "micro-USB";
 					type = "micro";
+
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+
+						port@0 {
+							reg = <0>;
+
+							muic_to_usb: endpoint {
+								remote-endpoint = <&usb_to_muic>;
+							};
+						};
+					};
 				};
 			};
 
@@ -465,9 +478,9 @@
 	};
 };
 
-/*&ehci {
+&ehci {
 	status = "okay";
-};*/
+};
 
 &exynos_usbphy {
 	vbus-supply = <&esafeout1_reg>;
@@ -487,8 +500,17 @@
 &hsotg {
 	vusb_d-supply = <&ldo15_reg>;
 	vusb_a-supply = <&ldo12_reg>;
+	companion = <&ehci>;
 	dr_mode = "otg";
+	role-switch-default-mode = "peripheral";
+	usb-role-switch;
 	status = "okay";
+
+	port {
+		usb_to_muic: endpoint {
+			remote-endpoint = <&muic_to_usb>;
+		};
+	};
 };
 
 &i2c_1 {

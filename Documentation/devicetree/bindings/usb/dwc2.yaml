@@ -172,6 +172,12 @@ properties:
 
   tpl-support: true
 
+  companion:
+    description:
+      phandle to a companion USB host controller to use instead of the DWC2
+      controller's host mode. Used on devices where the DWC2 controller does
+      not support host mode.
+
 dependencies:
   port: [ usb-role-switch ]
   role-switch-default-mode: [ usb-role-switch ]

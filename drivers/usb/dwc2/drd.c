@@ -35,8 +35,9 @@ static void dwc2_ovr_init(struct dwc2_hsotg *hsotg)
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
-	dwc2_force_mode(hsotg, (hsotg->dr_mode == USB_DR_MODE_HOST) ||
-				(hsotg->role_sw_default_mode == USB_DR_MODE_HOST));
+	if (!host->host_companion)
+		dwc2_force_mode(hsotg, (hsotg->dr_mode == USB_DR_MODE_HOST) ||
+			     (hsotg->role_sw_default_mode == USB_DR_MODE_HOST));
 }
 
 static int dwc2_ovr_avalid(struct dwc2_hsotg *hsotg, bool valid)
@@ -79,6 +80,28 @@ static int dwc2_ovr_bvalid(struct dwc2_hsotg *hsotg, bool valid)
 	else
 		gotgctl &= ~(GOTGCTL_BVALOVAL | GOTGCTL_VBVALOVAL);
 	dwc2_writel(hsotg, gotgctl, GOTGCTL);
+
+	return 0;
+}
+
+static int dwc2_host_companion_toggle(struct dwc2_hsotg *hsotg, bool enable)
+{
+	int ret;
+
+	if (WARN_ON(!hsotg->host_companion))
+		return 0;
+
+	if (enable) {
+		ret = device_attach(hsotg->host_companion);
+		if (ret < 0) {
+			dev_err(hsotg->dev,
+				"failed to %s host companion device: %d",
+				enable ? "attach" : "release", ret);
+			return ret;
+		}
+	} else {
+		device_release_driver(hsotg->host_companion);
+	}
 
 	return 0;
 }
@@ -147,9 +170,14 @@ static int dwc2_drd_role_sw_set(struct usb_role_switch *sw, enum usb_role role)
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
-	if (!already && hsotg->dr_mode == USB_DR_MODE_OTG)
-		/* This will raise a Connector ID Status Change Interrupt */
-		dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
+	if (!already && hsotg->dr_mode == USB_DR_MODE_OTG) {
+		if (hsotg->host_companion) {
+			dwc2_host_companion_toggle(role == USB_ROLE_HOST);
+		} else {
+			/* This will raise a Connector ID Status Change Interrupt */
+			dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
+		}
+	}
 
 	if (!hsotg->ll_hw_enabled && hsotg->clk)
 		clk_disable_unprepare(hsotg->clk);
@@ -227,7 +255,11 @@ void dwc2_drd_resume(struct dwc2_hsotg *hsotg)
 		else if (role == USB_ROLE_DEVICE)
 			dwc2_ovr_bvalid(hsotg, true);
 
-		dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
+		if (hsotg->host_companion) {
+			dwc2_host_companion_toggle(role == USB_ROLE_HOST);
+		} else {
+			dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
+		}
 
 		dev_dbg(hsotg->dev, "resuming %s-session valid\n",
 			role == USB_ROLE_NONE ? "No" :

@@ -489,6 +489,12 @@ static int dwc2_driver_probe(struct platform_device *dev)
 			return retval;
 	}
 
+	hsotg->host_companion = usb_of_get_companion_dev(&pdev->dev);
+	if (hsotg->host_companion)
+		dev_dbg(hsotg->dev, "found host companion device\n");
+	else
+		dev_dbg(hsotg->dev, "no host companion device\n");
+
 	retval = dwc2_lowlevel_hw_enable(hsotg);
 	if (retval)
 		return retval;

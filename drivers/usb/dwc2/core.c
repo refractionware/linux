@@ -523,6 +523,13 @@ void dwc2_force_mode(struct dwc2_hsotg *hsotg, bool host)
 	if (WARN_ON(!host && hsotg->dr_mode == USB_DR_MODE_HOST))
 		return;
 
+	/*
+	 * If a host companion device is specified, there is no need
+	 * to ever force host mode.
+	 */
+	if (WARN_ON(host && hsotg->host_companion))
+		return;
+
 	gusbcfg = dwc2_readl(hsotg, GUSBCFG);
 
 	set = host ? GUSBCFG_FORCEHOSTMODE : GUSBCFG_FORCEDEVMODE;
