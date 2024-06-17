@@ -296,10 +296,25 @@ static int exynos4x12_power_on(struct samsung_usb2_phy_instance *inst)
 	if (inst->ext_cnt++ > 0)
 		return 0;
 
+	switch(inst->cfg->id) {
+	case EXYNOS4x12_HOST:
+		pr_info("exynos4x12-usb phy: HOST poweron");
+		break;
+	case EXYNOS4x12_DEVICE:
+		pr_info("exynos4x12-usb phy: DEVICE poweron");
+		break;
+	case EXYNOS4x12_HSIC0:
+		pr_info("exynos4x12-usb phy: HSIC0 poweron");
+		break;
+	case EXYNOS4x12_HSIC1:
+		pr_info("exynos4x12-usb phy: HSIC1 poweron");
+		break;
+	}
+
 	if (inst->cfg->id == EXYNOS4x12_HOST) {
-		regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
-						EXYNOS_4x12_MODE_SWITCH_MASK,
-						EXYNOS_4x12_MODE_SWITCH_HOST);
+		//regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
+		//				EXYNOS_4x12_MODE_SWITCH_MASK,
+		//				EXYNOS_4x12_MODE_SWITCH_HOST);
 		exynos4x12_power_on_int(&drv->instances[EXYNOS4x12_DEVICE]);
 	}
 
@@ -334,6 +349,21 @@ static int exynos4x12_power_off(struct samsung_usb2_phy_instance *inst)
 
 	if (inst->ext_cnt-- > 1)
 		return 0;
+
+	switch(inst->cfg->id) {
+	case EXYNOS4x12_HOST:
+		pr_info("exynos4x12-usb phy: HOST poweroff");
+		break;
+	case EXYNOS4x12_DEVICE:
+		pr_info("exynos4x12-usb phy: DEVICE poweroff");
+		break;
+	case EXYNOS4x12_HSIC0:
+		pr_info("exynos4x12-usb phy: HSIC0 poweroff");
+		break;
+	case EXYNOS4x12_HSIC1:
+		pr_info("exynos4x12-usb phy: HSIC1 poweroff");
+		break;
+	}
 
 	if (inst->cfg->id == EXYNOS4x12_DEVICE && drv->cfg->has_mode_switch)
 		regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
