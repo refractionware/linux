@@ -179,9 +179,9 @@ static int exynos_ehci_probe(struct platform_device *pdev)
 		goto fail_clk;
 	}
 
-	//err = clk_prepare_enable(exynos_ehci->clk);
-	//if (err)
-	//	goto fail_clk;
+	err = clk_prepare_enable(exynos_ehci->clk);
+	if (err)
+		goto fail_clk;
 
 	hcd->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(hcd->regs)) {
@@ -216,7 +216,7 @@ static int exynos_ehci_probe(struct platform_device *pdev)
 		pdev->dev.of_node = NULL;
 
 	/* DMA burst Enable */
-	//writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
+	writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
 
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (err) {
