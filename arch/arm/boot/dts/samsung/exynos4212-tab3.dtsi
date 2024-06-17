@@ -481,8 +481,8 @@
 &ehci {
 	status = "okay";
 
-	phys = <&exynos_usbphy 2>, <&exynos_usbphy 3>;
-	phy-names = "hsic0", "hsic1";
+	//phys = <&exynos_usbphy 2>, <&exynos_usbphy 3>;
+	//phy-names = "hsic0", "hsic1";
 };
 
 &exynos_usbphy {
