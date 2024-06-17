@@ -35,7 +35,7 @@ static void dwc2_ovr_init(struct dwc2_hsotg *hsotg)
 
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
-	if (!host->host_companion)
+	if (!hsotg->host_companion)
 		dwc2_force_mode(hsotg, (hsotg->dr_mode == USB_DR_MODE_HOST) ||
 			     (hsotg->role_sw_default_mode == USB_DR_MODE_HOST));
 }
@@ -87,6 +87,8 @@ static int dwc2_ovr_bvalid(struct dwc2_hsotg *hsotg, bool valid)
 static int dwc2_host_companion_toggle(struct dwc2_hsotg *hsotg, bool enable)
 {
 	int ret;
+
+	dev_info(hsotg->dev, "host companion device %s", enable ? "attach" : "release");
 
 	if (WARN_ON(!hsotg->host_companion))
 		return 0;
@@ -172,7 +174,7 @@ static int dwc2_drd_role_sw_set(struct usb_role_switch *sw, enum usb_role role)
 
 	if (!already && hsotg->dr_mode == USB_DR_MODE_OTG) {
 		if (hsotg->host_companion) {
-			dwc2_host_companion_toggle(role == USB_ROLE_HOST);
+			dwc2_host_companion_toggle(hsotg, role == USB_ROLE_HOST);
 		} else {
 			/* This will raise a Connector ID Status Change Interrupt */
 			dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
@@ -256,7 +258,7 @@ void dwc2_drd_resume(struct dwc2_hsotg *hsotg)
 			dwc2_ovr_bvalid(hsotg, true);
 
 		if (hsotg->host_companion) {
-			dwc2_host_companion_toggle(role == USB_ROLE_HOST);
+			dwc2_host_companion_toggle(hsotg, role == USB_ROLE_HOST);
 		} else {
 			dwc2_force_mode(hsotg, role == USB_ROLE_HOST);
 		}

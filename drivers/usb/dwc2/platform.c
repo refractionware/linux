@@ -489,11 +489,11 @@ static int dwc2_driver_probe(struct platform_device *dev)
 			return retval;
 	}
 
-	hsotg->host_companion = usb_of_get_companion_dev(&pdev->dev);
+	hsotg->host_companion = usb_of_get_companion_dev(hsotg->dev);
 	if (hsotg->host_companion)
-		dev_dbg(hsotg->dev, "found host companion device\n");
+		dev_info(hsotg->dev, "found host companion device\n");
 	else
-		dev_dbg(hsotg->dev, "no host companion device\n");
+		dev_info(hsotg->dev, "no host companion device\n");
 
 	retval = dwc2_lowlevel_hw_enable(hsotg);
 	if (retval)
@@ -571,6 +571,12 @@ static int dwc2_driver_probe(struct platform_device *dev)
 		goto error_init;
 	}
 
+	dev_info(hsotg->dev, "is device: %s", dwc2_hw_is_device(hsotg) ? "true" : "false");
+	dev_info(hsotg->dev, "is host: %s", dwc2_hw_is_host(hsotg) ? "true" : "false");
+	dev_info(hsotg->dev, "is otg: %s", dwc2_hw_is_otg(hsotg) ? "true" : "false");
+	dev_info(hsotg->dev, "op mode: %d", dwc2_op_mode(hsotg));
+
+
 	if (hsotg->dr_mode != USB_DR_MODE_HOST) {
 		retval = dwc2_gadget_init(hsotg);
 		if (retval)
@@ -595,7 +601,7 @@ static int dwc2_driver_probe(struct platform_device *dev)
 		hsotg->reset_phy_on_wake = false;
 	}
 
-	if (hsotg->dr_mode != USB_DR_MODE_PERIPHERAL) {
+	if (hsotg->dr_mode != USB_DR_MODE_PERIPHERAL && !hsotg->host_companion) {
 		retval = dwc2_hcd_init(hsotg);
 		if (retval) {
 			if (hsotg->gadget_enabled)
@@ -611,7 +617,7 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	dwc2_debugfs_init(hsotg);
 
 	/* Gadget code manages lowlevel hw on its own */
-	if (hsotg->dr_mode == USB_DR_MODE_PERIPHERAL)
+	if (hsotg->dr_mode == USB_DR_MODE_PERIPHERAL || hsotg->host_companion)
 		dwc2_lowlevel_hw_disable(hsotg);
 
 #if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || \

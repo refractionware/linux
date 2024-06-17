@@ -99,6 +99,11 @@ static int exynos_ehci_phy_enable(struct device *dev)
 	int i;
 	int ret = 0;
 
+	if (true) {
+		pr_info("skipping phy poweron!");
+		return 0;
+	}
+
 	for (i = 0; ret == 0 && i < PHY_NUMBER; i++)
 		ret = phy_power_on(exynos_ehci->phy[i]);
 	if (ret)
@@ -113,6 +118,11 @@ static void exynos_ehci_phy_disable(struct device *dev)
 	struct usb_hcd *hcd = dev_get_drvdata(dev);
 	struct exynos_ehci_hcd *exynos_ehci = to_exynos_ehci(hcd);
 	int i;
+
+	if (true) {
+		pr_info("skipping phy poweroff!");
+		return;
+	}
 
 	for (i = 0; i < PHY_NUMBER; i++)
 		phy_power_off(exynos_ehci->phy[i]);
@@ -169,9 +179,9 @@ static int exynos_ehci_probe(struct platform_device *pdev)
 		goto fail_clk;
 	}
 
-	err = clk_prepare_enable(exynos_ehci->clk);
-	if (err)
-		goto fail_clk;
+	//err = clk_prepare_enable(exynos_ehci->clk);
+	//if (err)
+	//	goto fail_clk;
 
 	hcd->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(hcd->regs)) {
@@ -206,7 +216,7 @@ static int exynos_ehci_probe(struct platform_device *pdev)
 		pdev->dev.of_node = NULL;
 
 	/* DMA burst Enable */
-	writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
+	//writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
 
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (err) {

@@ -510,8 +510,12 @@ void dwc2_force_mode(struct dwc2_hsotg *hsotg, bool host)
 	/*
 	 * Force mode has no effect if the hardware is not OTG.
 	 */
-	if (!dwc2_hw_is_otg(hsotg))
+	if (!dwc2_hw_is_otg(hsotg)) {
+		pr_info("hw is not otg");
 		return;
+	} else {
+		pr_info("hw is otg");
+	}
 
 	/*
 	 * If dr_mode is either peripheral or host only, there is no
