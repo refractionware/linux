@@ -609,6 +609,8 @@ static int dwc2_driver_probe(struct platform_device *dev)
 			goto error_drd;
 		}
 		hsotg->hcd_enabled = 1;
+	} else {
+		dwc2_core_init(hsotg, true);
 	}
 
 	platform_set_drvdata(dev, hsotg);
