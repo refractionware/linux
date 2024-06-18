@@ -510,12 +510,8 @@ void dwc2_force_mode(struct dwc2_hsotg *hsotg, bool host)
 	/*
 	 * Force mode has no effect if the hardware is not OTG.
 	 */
-	if (!dwc2_hw_is_otg(hsotg)) {
-		pr_info("hw is not otg");
+	if (!dwc2_hw_is_otg(hsotg))
 		return;
-	} else {
-		pr_info("hw is otg");
-	}
 
 	/*
 	 * If dr_mode is either peripheral or host only, there is no
@@ -525,13 +521,6 @@ void dwc2_force_mode(struct dwc2_hsotg *hsotg, bool host)
 		return;
 
 	if (WARN_ON(!host && hsotg->dr_mode == USB_DR_MODE_HOST))
-		return;
-
-	/*
-	 * If a host companion device is specified, there is no need
-	 * to ever force host mode.
-	 */
-	if (WARN_ON(host && hsotg->host_companion))
 		return;
 
 	gusbcfg = dwc2_readl(hsotg, GUSBCFG);

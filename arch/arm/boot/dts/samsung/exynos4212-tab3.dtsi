@@ -483,6 +483,13 @@
 
 	//phys = <&exynos_usbphy 2>, <&exynos_usbphy 3>;
 	//phy-names = "hsic0", "hsic1";
+
+	port@0 {
+		reg = <0>;
+		usb_to_muic: endpoint {
+			remote-endpoint = <&muic_to_usb>;
+		};
+	}
 };
 
 &exynos_usbphy {
