@@ -535,6 +535,10 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	if (retval)
 		goto error;
 
+	/*if (hsotg->params.exynos4_mode_switch) {
+		
+	}*/
+
 	if (hsotg->params.activate_stm_id_vb_detection) {
 		u32 ggpio;
 
