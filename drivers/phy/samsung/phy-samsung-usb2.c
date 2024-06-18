@@ -7,6 +7,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/extcon.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -140,6 +141,32 @@ static const struct of_device_id samsung_usb2_phy_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, samsung_usb2_phy_of_match);
 
+static int
+samsung_usb2_phy_extcon_notify(struct notifier_block *nb, unsigned long event,
+			      void *ptr)
+{
+	struct samsung_usb2_phy_driver *drv;
+	enum samsung_usb2_mode_switch mode;
+
+	drv = container_of(nb, struct samsung_usb2_phy_driver, extcon_notify);
+
+	if (!drv->cfg->has_mode_switch) {
+		pr_info("usb2 phy: no mode switch wtf?\n");
+		return -EINVAL;
+	}
+
+	if (event)
+		/* Host mode on */
+		mode = EXYNOS_MODE_SWITCH_HOST;
+	else
+		/* Host mode off */
+		mode = EXYNOS_MODE_SWITCH_DEVICE;
+
+	pr_info("usb2 phy: mode switch to %d\n", mode);
+
+	return drv->cfg->set_mode_switch(drv, mode);
+}
+
 static int samsung_usb2_phy_probe(struct platform_device *pdev)
 {
 	const struct samsung_usb2_phy_config *cfg;
@@ -187,6 +214,31 @@ static int samsung_usb2_phy_probe(struct platform_device *pdev)
 		if (IS_ERR(drv->reg_sys)) {
 			dev_err(dev, "Failed to map system registers (via syscon)\n");
 			return PTR_ERR(drv->reg_sys);
+		}
+
+		drv->extcon = extcon_get_edev_by_phandle(dev, 0);
+		if (IS_ERR(drv->extcon)) {
+			pr_info("usb2 phy: error in extcon\n");
+			if (PTR_ERR(drv->extcon) == -ENODEV) {
+				pr_info("usb2 phy: no extcon dev\n");
+				drv->extcon = NULL;
+			} else {
+				return dev_err_probe(dev, PTR_ERR(drv->extcon),
+					"Failed to get extcon device\n");
+			}
+		} else {
+			pr_info("usb2 phy: found extcon\n");
+			drv->extcon_notify.notifier_call = \
+				samsung_usb2_phy_extcon_notify;
+
+			ret = devm_extcon_register_notifier(dev,
+						drv->extcon,
+						EXTCON_USB_HOST,
+						&drv->extcon_notify);
+			if (ret) {
+				dev_err(dev, "Failed to register extcon notifier\n");
+				return ret;
+			}
 		}
 	}
 
