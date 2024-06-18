@@ -5,13 +5,10 @@
 // Copyright (C) 2014 Samsung Electronics
 // Krzysztof Kozlowski <krzk@kernel.org>
 
-#include <linux/devm-helpers.h>
-#include <linux/extcon.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
-#include <linux/regulator/consumer.h>
 #include <linux/mfd/max77693.h>
 #include <linux/mfd/max77693-common.h>
 #include <linux/mfd/max77693-private.h>
@@ -24,21 +21,12 @@ struct max77693_charger {
 	struct device		*dev;
 	struct max77693_dev	*max77693;
 	struct power_supply	*charger;
-	struct regulator	*regu;
 
 	u32 constant_volt;
 	u32 min_system_volt;
 	u32 thermal_regulation_temp;
 	u32 batttery_overcurrent;
-	u32 fast_charge_current;
 	u32 charge_input_threshold_volt;
-
-	/* USB cable notifications */
-	struct {
-		struct extcon_dev *edev;
-		struct notifier_block nb;
-		struct work_struct work;
-	} cable;
 };
 
 static int max77693_get_charger_state(struct regmap *regmap, int *val)
@@ -209,51 +197,12 @@ static int max77693_get_online(struct regmap *regmap, int *val)
 	return 0;
 }
 
-/*
- * There are *two* current limit registers:
- * - CHGIN limit, which limits the input current from the external charger;
- * - Fast charge current limit, which limits the current going to the battery.
- */
-
-static int max77693_get_input_current_limit(struct max77693_charger *chg,
-					    int *val)
-{
-	int ret;
-
-	ret = regulator_get_current_limit(chg->regu);
-	if (ret < 0)
-		return ret;
-
-	*val = ret;
-
-	return 0;
-}
-
-static int max77693_get_current_max(struct regmap *regmap, int *val)
-{
-	unsigned int data;
-	int ret;
-
-	ret = regmap_read(regmap, MAX77693_CHG_REG_CHG_CNFG_02, &data);
-	if (ret < 0)
-		return ret;
-
-	data &= CHG_CNFG_02_CC_MASK;
-	data >>= CHG_CNFG_02_CC_SHIFT;
-
-	*val = (data * 333 / 10) * 1000; /* 3 steps/0.1A */
-
-	return 0;
-}
-
 static enum power_supply_property max77693_charger_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
-	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 };
@@ -281,12 +230,6 @@ static int max77693_charger_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		ret = max77693_get_online(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = max77693_get_input_current_limit(chg, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		ret = max77693_get_current_max(regmap, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = max77693_charger_model;
@@ -601,32 +544,6 @@ static int max77693_set_batttery_overcurrent(struct max77693_charger *chg,
 			CHG_CNFG_12_B2SOVRC_MASK, data);
 }
 
-static int max77693_set_charge_current(struct max77693_charger *chg,
-		unsigned int uamp)
-{
-	unsigned int data;
-
-	data = (uamp / 1000) * 10 / 333; /* 0.1A/3 steps */
-	data <<= CHG_CNFG_02_CC_SHIFT;
-
-	if ((data << CHG_CNFG_02_CC_SHIFT) > CHG_CNFG_02_CC_MASK) {
-		dev_err(chg->dev, "Wrong value for fast charge current\n");
-		return -EINVAL;
-	}
-
-	dev_dbg(chg->dev, "Fast charge current: %u (0x%x)\n", uamp, data);
-
-	return regmap_update_bits(chg->max77693->regmap,
-			MAX77693_CHG_REG_CHG_CNFG_02,
-			CHG_CNFG_02_CC_MASK, data);
-}
-
-static int max77693_set_input_current(struct max77693_charger *chg,
-		unsigned int uamp)
-{
-	return regulator_set_current_limit(chg->regu, uamp, uamp);
-}
-
 static int max77693_set_charge_input_threshold_volt(struct max77693_charger *chg,
 		unsigned int uvolt)
 {
@@ -708,181 +625,14 @@ static int max77693_reg_init(struct max77693_charger *chg)
 			chg->charge_input_threshold_volt);
 }
 
-static int max77693_set_charging(struct max77693_charger *chg, bool enable)
-{
-	int is_enabled;
-	int ret = 0;
-
-	is_enabled = regulator_is_enabled(chg->regu);
-	if (is_enabled < 0)
-		return is_enabled;
-
-	if (enable && !is_enabled)
-		ret = regulator_enable(chg->regu);
-	else if (!enable && is_enabled)
-		ret = regulator_disable(chg->regu);
-
-	return ret;
-}
-
-static int max77693_set_otg(struct max77693_charger *chg, bool enable)
-{
-	struct regmap *regmap = chg->max77693->regmap;
-	unsigned int data;
-	bool is_enabled;
-	int ret;
-
-	ret = regmap_read(regmap, MAX77693_CHG_REG_CHG_CNFG_00, &data);
-	if (ret)
-		return ret;
-
-	is_enabled = !!(data & CHG_CNFG_00_OTG_MASK);
-
-	if (enable && !is_enabled) {
-		/* OTG on, boost on, DIS_MUIC_CTRL on */
-		data |= CHG_CNFG_00_OTG_MASK | CHG_CNFG_00_BOOST_MASK \
-				| CHG_CNFG_00_DIS_MUIC_CTRL_MASK;
-
-	} else if (!enable && is_enabled) {
-		/* OTG off, boost off, DIS_MUIC_CTRL off */
-		data &= ~(CHG_CNFG_00_OTG_MASK | CHG_CNFG_00_BOOST_MASK \
-				| CHG_CNFG_00_DIS_MUIC_CTRL_MASK);
-	}
-
-	return regmap_write(chg->max77693->regmap,
-			MAX77693_CHG_REG_CHG_CNFG_00,
-			data);
-}
-
-static void max77693_charger_extcon_work(struct work_struct *work)
-{
-	struct max77693_charger *chg = container_of(work, struct max77693_charger,
-						  cable.work);
-	struct extcon_dev *edev = chg->cable.edev;
-	bool set_charging, set_otg;
-	unsigned int charge_current, input_current;
-	int connector, state;
-	int ret;
-
-	for (connector = EXTCON_USB_HOST; connector <= EXTCON_CHG_USB_PD;
-	     connector++) {
-		state = extcon_get_state(edev, connector);
-		if (state == 1)
-			break;
-	}
-
-	switch (connector) {
-	case EXTCON_CHG_USB_SDP:
-	case EXTCON_CHG_USB_SLOW:
-		set_charging = true;
-		set_otg = false;
-		charge_current = 500000; /* 500 mA */
-		input_current = 500000; /* 500 mA */
-
-		dev_info(chg->dev, "slow charging. connector type: %d\n",
-			 connector);
-		break;
-	case EXTCON_CHG_USB_DCP:
-	case EXTCON_CHG_USB_CDP:
-	case EXTCON_CHG_USB_ACA:
-	case EXTCON_CHG_USB_FAST:
-	case EXTCON_CHG_WPT:
-	case EXTCON_CHG_USB_PD:
-		set_charging = true;
-		set_otg = false;
-		charge_current = chg->fast_charge_current;
-		input_current = chg->fast_charge_current;
-
-		dev_info(chg->dev, "fast charging. connector type: %d\n",
-			 connector);
-		break;
-	case EXTCON_USB_HOST:
-		set_charging = false;
-		set_otg = true;
-		charge_current = 500000; /* 500 mA */
-		input_current = 500000; /* 500 mA */
-
-		dev_info(chg->dev, "USB host. connector type: %d\n",
-			 connector);
-		break;
-	default:
-		set_charging = false;
-		set_otg = false;
-		charge_current = 0;
-		input_current = 500000; /* 500 mA */
-
-		dev_info(chg->dev, "disconnected. connector type: %d\n",
-			 connector);
-		break;
-	}
-
-	ret = max77693_set_charge_current(chg, charge_current);
-	if (ret) {
-		dev_err(chg->dev, "failed to set charge current (%d)\n", ret);
-		goto out;
-	}
-
-	ret = max77693_set_input_current(chg, input_current);
-	if (ret) {
-		dev_err(chg->dev, "failed to set input current (%d)\n", ret);
-		goto out;
-	}
-
-	ret = max77693_set_charging(chg, set_charging);
-	if (ret) {
-		dev_err(chg->dev, "failed to set charging (%d)\n", ret);
-		goto out;
-	}
-
-	ret = max77693_set_otg(chg, set_otg);
-	if (ret) {
-		dev_err(chg->dev, "failed to set OTG (%d)\n", ret);
-		goto out;
-	}
-
-out:
-	power_supply_changed(chg->charger);
-}
-
-static int max77693_charger_extcon_notifier(struct notifier_block *nb,
-					  unsigned long event, void *param)
-{
-	struct max77693_charger *chg = container_of(nb, struct max77693_charger,
-						    cable.nb);
-
-	schedule_work(&chg->cable.work);
-
-	return NOTIFY_OK;
-}
-
 #ifdef CONFIG_OF
 static int max77693_dt_init(struct device *dev, struct max77693_charger *chg)
 {
 	struct device_node *np = dev->of_node;
-	struct device_node *np_conn, *np_edev;
 
 	if (!np) {
 		dev_err(dev, "no charger OF node\n");
 		return -EINVAL;
-	}
-
-	np_conn = of_parse_phandle(np, "maxim,usb-connector", 0);
-	np_edev = of_get_parent(np_conn);
-
-	chg->cable.edev = extcon_find_edev_by_node(np_edev);
-	if (IS_ERR(chg->cable.edev)) {
-		/*
-		 * In case of deferred extcon probe, defer our probe as well
-		 * until it appears.
-		 */
-		if (PTR_ERR(chg->cable.edev) == -EPROBE_DEFER)
-			return PTR_ERR(chg->cable.edev);
-		/*
-		 * Otherwise, ignore errors (the charger can run without a
-		 * connector provided).
-		 */
-		dev_warn(dev, "no extcon device found in device-tree (%ld)\n",
-			 PTR_ERR(chg->cable.edev));
 	}
 
 	if (of_property_read_u32(np, "maxim,constant-microvolt",
@@ -900,10 +650,6 @@ static int max77693_dt_init(struct device *dev, struct max77693_charger *chg)
 	if (of_property_read_u32(np, "maxim,battery-overcurrent-microamp",
 			&chg->batttery_overcurrent))
 		chg->batttery_overcurrent = DEFAULT_BATTERY_OVERCURRENT;
-
-	if (of_property_read_u32(np, "maxim,fast-charge-current-microamp",
-			&chg->fast_charge_current))
-		chg->fast_charge_current = DEFAULT_FAST_CHARGE_CURRENT;
 
 	if (of_property_read_u32(np, "maxim,charge-input-threshold-microvolt",
 			&chg->charge_input_threshold_volt))
@@ -934,14 +680,6 @@ static int max77693_charger_probe(struct platform_device *pdev)
 	chg->dev = &pdev->dev;
 	chg->max77693 = max77693;
 
-	chg->regu = devm_regulator_get(chg->dev, "CHARGER");
-	if (IS_ERR(chg->regu)) {
-		ret = PTR_ERR(chg->regu);
-		dev_err(&pdev->dev,
-			"failed to get charger regulator %d\n", ret);
-		return ret;
-	}
-
 	ret = max77693_dt_init(&pdev->dev, chg);
 	if (ret)
 		return ret;
@@ -951,26 +689,6 @@ static int max77693_charger_probe(struct platform_device *pdev)
 		return ret;
 
 	psy_cfg.drv_data = chg;
-
-	/* Set up extcon if the USB connector node was found */
-	if (!IS_ERR(chg->cable.edev)) {
-		ret = devm_work_autocancel(&pdev->dev, &chg->cable.work,
-					   max77693_charger_extcon_work);
-		if (ret) {
-			dev_err(&pdev->dev, "failed: initialize extcon work\n");
-			return ret;
-		}
-
-		chg->cable.nb.notifier_call = max77693_charger_extcon_notifier;
-
-		ret = devm_extcon_register_notifier_all(&pdev->dev,
-							chg->cable.edev,
-							&chg->cable.nb);
-		if (ret) {
-			dev_err(&pdev->dev, "failed: register extcon notifier\n");
-			return ret;
-		}
-	}
 
 	ret = device_create_file(&pdev->dev, &dev_attr_fast_charge_timer);
 	if (ret) {
@@ -991,9 +709,9 @@ static int max77693_charger_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	chg->charger = devm_power_supply_register(&pdev->dev,
-						  &max77693_charger_desc,
-						  &psy_cfg);
+	chg->charger = power_supply_register(&pdev->dev,
+						&max77693_charger_desc,
+						&psy_cfg);
 	if (IS_ERR(chg->charger)) {
 		dev_err(&pdev->dev, "failed: power supply register\n");
 		ret = PTR_ERR(chg->charger);
@@ -1007,17 +725,18 @@ err:
 	device_remove_file(&pdev->dev, &dev_attr_top_off_threshold_current);
 	device_remove_file(&pdev->dev, &dev_attr_fast_charge_timer);
 
-	devm_extcon_unregister_notifier_all(&pdev->dev, chg->cable.edev,
-					    &chg->cable.nb);
-
 	return ret;
 }
 
 static void max77693_charger_remove(struct platform_device *pdev)
 {
+	struct max77693_charger *chg = platform_get_drvdata(pdev);
+
 	device_remove_file(&pdev->dev, &dev_attr_top_off_timer);
 	device_remove_file(&pdev->dev, &dev_attr_top_off_threshold_current);
 	device_remove_file(&pdev->dev, &dev_attr_fast_charge_timer);
+
+	power_supply_unregister(chg->charger);
 }
 
 static const struct platform_device_id max77693_charger_id[] = {
