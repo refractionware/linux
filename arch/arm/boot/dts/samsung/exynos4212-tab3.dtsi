@@ -157,7 +157,7 @@
 				};
 			};
 
-			muic {
+			max77693_muic: muic {
 				compatible = "maxim,max77693-muic";
 
 				usb_conn: connector {
@@ -480,20 +480,12 @@
 
 &ehci {
 	status = "okay";
-
-	//phys = <&exynos_usbphy 2>, <&exynos_usbphy 3>;
-	//phy-names = "hsic0", "hsic1";
-
-	port@0 {
-		reg = <0>;
-		usb_to_muic: endpoint {
-			remote-endpoint = <&muic_to_usb>;
-		};
-	}
+	companion = <&ohci>;
 };
 
 &exynos_usbphy {
 	vbus-supply = <&esafeout1_reg>;
+	extcon = <&max77693_muic>;
 	status = "okay";
 };
 
@@ -894,9 +886,9 @@
 	status = "okay";
 };
 
-/*&ohci {
+&ohci {
 	status = "okay";
-};*/
+};
 
 &pinctrl_0 {
 	pinctrl-names = "default";
