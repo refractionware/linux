@@ -193,9 +193,6 @@ static int exynos4x12_set_mode_switch(struct samsung_usb2_phy_driver *drv,
 			enum samsung_usb2_mode_switch mode)
 {
 	unsigned int val;
-	int ret;
-
-	pr_info("usb2 phy: set mode switch for mode %d\n", mode);
 
 	switch (mode) {
 	case EXYNOS_MODE_SWITCH_DEVICE:
@@ -208,10 +205,8 @@ static int exynos4x12_set_mode_switch(struct samsung_usb2_phy_driver *drv,
 		return -EINVAL;
 	}
 
-	ret = regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
+	return regmap_update_bits(drv->reg_sys, EXYNOS_4x12_MODE_SWITCH_OFFSET,
 					EXYNOS_4x12_MODE_SWITCH_MASK, val);
-	pr_info("usb2 phy: mode switch %d\n", ret);
-	return ret;
 }
 
 static void exynos4x12_setup_clk(struct samsung_usb2_phy_instance *inst)

@@ -150,10 +150,8 @@ samsung_usb2_phy_extcon_notify(struct notifier_block *nb, unsigned long event,
 
 	drv = container_of(nb, struct samsung_usb2_phy_driver, extcon_notify);
 
-	if (!drv->cfg->has_mode_switch) {
-		pr_info("usb2 phy: no mode switch wtf?\n");
+	if (!drv->cfg->has_mode_switch)
 		return -EINVAL;
-	}
 
 	if (event)
 		/* Host mode on */
@@ -161,8 +159,6 @@ samsung_usb2_phy_extcon_notify(struct notifier_block *nb, unsigned long event,
 	else
 		/* Host mode off */
 		mode = EXYNOS_MODE_SWITCH_DEVICE;
-
-	pr_info("usb2 phy: mode switch to %d\n", mode);
 
 	return drv->cfg->set_mode_switch(drv, mode);
 }
@@ -218,16 +214,13 @@ static int samsung_usb2_phy_probe(struct platform_device *pdev)
 
 		drv->extcon = extcon_get_edev_by_phandle(dev, 0);
 		if (IS_ERR(drv->extcon)) {
-			pr_info("usb2 phy: error in extcon\n");
 			if (PTR_ERR(drv->extcon) == -ENODEV) {
-				pr_info("usb2 phy: no extcon dev\n");
 				drv->extcon = NULL;
 			} else {
 				return dev_err_probe(dev, PTR_ERR(drv->extcon),
 					"Failed to get extcon device\n");
 			}
 		} else {
-			pr_info("usb2 phy: found extcon\n");
 			drv->extcon_notify.notifier_call = \
 				samsung_usb2_phy_extcon_notify;
 
