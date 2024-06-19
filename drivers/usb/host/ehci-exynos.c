@@ -31,6 +31,7 @@
 #define EHCI_INSNREG00_ENABLE_DMA_BURST	\
 	(EHCI_INSNREG00_ENA_INCR16 | EHCI_INSNREG00_ENA_INCR8 |	\
 	 EHCI_INSNREG00_ENA_INCR4 | EHCI_INSNREG00_ENA_INCRX_ALIGN)
+#define EHCI_INSNREG00_OHCI_SUSP_LGCY		(0x1 << 20)
 
 static struct hc_driver __read_mostly exynos_ehci_hc_driver;
 
@@ -215,8 +216,9 @@ static int exynos_ehci_probe(struct platform_device *pdev)
 	if (exynos_ehci->legacy_phy)
 		pdev->dev.of_node = NULL;
 
-	/* DMA burst Enable */
-	writel(EHCI_INSNREG00_ENABLE_DMA_BURST, EHCI_INSNREG00(hcd->regs));
+	/* DMA burst Enable, OHCI legacy suspend enable */
+	writel(EHCI_INSNREG00_ENABLE_DMA_BURST | EHCI_INSNREG00_OHCI_SUSP_LGCY,
+	       EHCI_INSNREG00(hcd->regs));
 
 	err = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (err) {
