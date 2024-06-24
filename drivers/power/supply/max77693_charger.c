@@ -252,69 +252,6 @@ static int max77693_get_fast_charge_current(struct regmap *regmap, int *val)
 	return 0;
 }
 
-static enum power_supply_property max77693_charger_props[] = {
-	POWER_SUPPLY_PROP_STATUS,
-	POWER_SUPPLY_PROP_CHARGE_TYPE,
-	POWER_SUPPLY_PROP_HEALTH,
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
-	POWER_SUPPLY_PROP_CURRENT_MAX,
-	POWER_SUPPLY_PROP_MODEL_NAME,
-	POWER_SUPPLY_PROP_MANUFACTURER,
-};
-
-static int max77693_charger_get_property(struct power_supply *psy,
-			    enum power_supply_property psp,
-			    union power_supply_propval *val)
-{
-	struct max77693_charger *chg = power_supply_get_drvdata(psy);
-	struct regmap *regmap = chg->max77693->regmap;
-	int ret = 0;
-
-	switch (psp) {
-	case POWER_SUPPLY_PROP_STATUS:
-		ret = max77693_get_charger_state(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_CHARGE_TYPE:
-		ret = max77693_get_charge_type(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_HEALTH:
-		ret = max77693_get_battery_health(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_PRESENT:
-		ret = max77693_get_present(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_ONLINE:
-		ret = max77693_get_online(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		ret = max77693_get_input_current_limit(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		ret = max77693_get_fast_charge_current(regmap, &val->intval);
-		break;
-	case POWER_SUPPLY_PROP_MODEL_NAME:
-		val->strval = max77693_charger_model;
-		break;
-	case POWER_SUPPLY_PROP_MANUFACTURER:
-		val->strval = max77693_charger_manufacturer;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return ret;
-}
-
-static const struct power_supply_desc max77693_charger_desc = {
-	.name		= MAX77693_CHARGER_NAME,
-	.type		= POWER_SUPPLY_TYPE_BATTERY,
-	.properties	= max77693_charger_props,
-	.num_properties	= ARRAY_SIZE(max77693_charger_props),
-	.get_property	= max77693_charger_get_property,
-};
-
 static ssize_t device_attr_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count,
 		int (*fn)(struct max77693_charger *, unsigned long))
@@ -677,6 +614,100 @@ static int max77693_set_charge_input_threshold_volt(struct max77693_charger *chg
 			MAX77693_CHG_REG_CHG_CNFG_12,
 			CHG_CNFG_12_VCHGINREG_MASK, data);
 }
+
+static enum power_supply_property max77693_charger_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
+	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
+};
+
+static int max77693_charger_get_property(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    union power_supply_propval *val)
+{
+	struct max77693_charger *chg = power_supply_get_drvdata(psy);
+	struct regmap *regmap = chg->max77693->regmap;
+	int ret = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		ret = max77693_get_charger_state(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		ret = max77693_get_charge_type(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		ret = max77693_get_battery_health(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		ret = max77693_get_present(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		ret = max77693_get_online(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		ret = max77693_get_input_current_limit(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		ret = max77693_get_fast_charge_current(regmap, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->strval = max77693_charger_model;
+		break;
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		val->strval = max77693_charger_manufacturer;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int max77693_charger_set_property(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    const union power_supply_propval *val)
+{
+	struct max77693_charger *chg = power_supply_get_drvdata(psy);
+	int ret = 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		ret = max77693_set_input_current_limit(chg, val->intval);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int max77693_charger_property_is_writeable(struct power_supply *psy,
+			    enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static const struct power_supply_desc max77693_charger_desc = {
+	.name		= MAX77693_CHARGER_NAME,
+	.type		= POWER_SUPPLY_TYPE_BATTERY,
+	.properties	= max77693_charger_props,
+	.num_properties	= ARRAY_SIZE(max77693_charger_props),
+	.get_property	= max77693_charger_get_property,
+	.set_property	= max77693_charger_set_property,
+	.property_is_writeable = max77693_charger_property_is_writeable,
+};
 
 /*
  * Sets charger registers to proper and safe default values.
