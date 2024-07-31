@@ -58,7 +58,7 @@
 #define VIDCON0_CLKVAL_F_SHIFT			6
 #define VIDCON0_CLKVAL_F_LIMIT			0xff
 #define VIDCON0_CLKVAL_F(_x)			((_x) << 6)
-#define VIDCON0_VLCKFREE			(1 << 5)
+#define VIDCON0_VCLKFREE			(1 << 5)
 #define VIDCON0_CLKDIR				(1 << 4)
 
 #define VIDCON0_CLKSEL_MASK			(0x3 << 2)
