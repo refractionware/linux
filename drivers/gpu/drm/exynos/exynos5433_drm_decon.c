@@ -504,7 +504,7 @@ static void decon_swreset(struct decon_context *ctx)
 	if (!(ctx->out_type & IFTYPE_HDMI))
 		return;
 
-	writel(VIDCON0_CLKVALUP | VIDCON0_VLCKFREE, ctx->addr + DECON_VIDCON0);
+	writel(VIDCON0_CLKVALUP | VIDCON0_VCLKFREE, ctx->addr + DECON_VIDCON0);
 	decon_set_bits(ctx, DECON_CMU,
 		       CMU_CLKGAGE_MODE_SFR_F | CMU_CLKGAGE_MODE_MEM_F, ~0);
 	writel(VIDCON1_VCLK_RUN_VDEN_DISABLE, ctx->addr + DECON_VIDCON1);

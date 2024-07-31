@@ -81,7 +81,7 @@
 /* VIDCON0 */
 #define VIDCON0_SWRESET			(1 << 28)
 #define VIDCON0_CLKVALUP		(1 << 14)
-#define VIDCON0_VLCKFREE		(1 << 5)
+#define VIDCON0_VCLKFREE		(1 << 5)
 #define VIDCON0_STOP_STATUS		(1 << 2)
 #define VIDCON0_ENVID			(1 << 1)
 #define VIDCON0_ENVID_F			(1 << 0)
