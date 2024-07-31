@@ -84,6 +84,7 @@
 #define VIDCON1_VCLK_MASK			(0x3 << 9)
 #define VIDCON1_VCLK_HOLD			(0x0 << 9)
 #define VIDCON1_VCLK_RUN			(0x1 << 9)
+#define VIDCON1_VCLK_RUN_NO_VDEN		(0x3 << 9)
 
 #define VIDCON1_INV_VCLK			(1 << 7)
 #define VIDCON1_INV_HSYNC			(1 << 6)
