@@ -121,6 +121,14 @@ properties:
     description:
       Video clock signal is inverted.
 
+  samsung,vclk-hold-type:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    description:
+      VCLK hold scheme at data underflow. 0 for hold, 1 for running,
+      2 for running + disable VDEN.
+    default: 0
+
   samsung,sysreg:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
