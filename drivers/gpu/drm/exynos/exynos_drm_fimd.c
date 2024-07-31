@@ -111,6 +111,7 @@ struct fimd_driver_data {
 	unsigned int has_hw_trigger:1;
 	unsigned int has_trigger_per_te:1;
 	unsigned int has_bgr_support:1;
+	unsigned int has_fixvclk:1;
 };
 
 static struct fimd_driver_data s3c64xx_fimd_driver_data = {
@@ -123,6 +124,7 @@ static struct fimd_driver_data s5pv210_fimd_driver_data = {
 	.timing_base = 0x0,
 	.has_shadowcon = 1,
 	.has_clksel = 1,
+	.has_fixvclk = 1,
 };
 
 static struct fimd_driver_data exynos3_fimd_driver_data = {
@@ -141,6 +143,7 @@ static struct fimd_driver_data exynos4_fimd_driver_data = {
 	.has_shadowcon = 1,
 	.has_vtsel = 1,
 	.has_bgr_support = 1,
+	.has_fixvclk = 1,
 };
 
 static struct fimd_driver_data exynos5_fimd_driver_data = {
@@ -153,6 +156,7 @@ static struct fimd_driver_data exynos5_fimd_driver_data = {
 	.has_vtsel = 1,
 	.has_dp_clk = 1,
 	.has_bgr_support = 1,
+	.has_fixvclk = 1,
 };
 
 static struct fimd_driver_data exynos5420_fimd_driver_data = {
@@ -167,6 +171,7 @@ static struct fimd_driver_data exynos5420_fimd_driver_data = {
 	.has_mic_bypass = 1,
 	.has_dp_clk = 1,
 	.has_bgr_support = 1,
+	.has_fixvclk = 1,
 };
 
 struct fimd_context {
@@ -1063,6 +1068,39 @@ static const struct exynos_drm_crtc_ops fimd_crtc_ops = {
 	.te_handler = fimd_te_handler,
 };
 
+static ssize_t fimd_dump_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fimd_context *ctx = dev_get_drvdata(dev);
+	u32 reg_val, i;
+	char temp[50];
+
+	for (i = 0; i < 0x0110; i += 4) {
+		reg_val = readl(ctx->regs + i);
+		sprintf(temp,
+			"[fimd]0xXXXX_%04X = 0x%08X\n",
+			(i*4), reg_val);
+		strcat(buf, temp);
+	}
+
+	return strlen(buf);
+}
+
+static DEVICE_ATTR_RO(fimd_dump);
+
+static struct attribute *exynos_fimd_attrs[] = {
+	&dev_attr_fimd_dump.attr,
+	NULL,
+};
+
+static const struct attribute_group exynos_fimd_attr_group = {
+	.attrs = exynos_fimd_attrs,
+};
+
+static const struct attribute_group *exynos_fimd_attr_groups[] = {
+	&exynos_fimd_attr_group,
+	NULL,
+};
+
 static irqreturn_t fimd_irq_handler(int irq, void *dev_id)
 {
 	struct fimd_context *ctx = (struct fimd_context *)dev_id;
@@ -1172,6 +1210,7 @@ static int fimd_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct fimd_context *ctx;
 	struct device_node *i80_if_timings;
+	u32 val;
 	int ret;
 
 	if (!dev->of_node)
@@ -1190,10 +1229,30 @@ static int fimd_probe(struct platform_device *pdev)
 	if (of_property_read_bool(dev->of_node, "samsung,invert-vclk"))
 		ctx->vidcon1 |= VIDCON1_INV_VCLK;
 
+	if (ctx->driver_data->has_fixvclk) {
+		if (of_property_read_u32(dev->of_node,
+					 "samsung,vclk-hold-scheme", &val))
+			val = 0;
+
+		switch (val) {
+		case 1:
+			/* VCLK running (0b01) */
+			ctx->vidcon1 |= VIDCON1_VCLK_RUN;
+			break;
+		case 2:
+			/* VCLK running + disable VDEN (0b11) */
+			ctx->vidcon1 |= VIDCON1_VCLK_RUN_NO_VDEN;
+			break;
+		case 0:
+		default:
+			/* VCLK hold (0b00) */
+			ctx->vidcon1 |= VIDCON1_VCLK_HOLD;
+			break;
+		}
+	}
+
 	i80_if_timings = of_get_child_by_name(dev->of_node, "i80-if-timings");
 	if (i80_if_timings) {
-		u32 val;
-
 		ctx->i80_if = true;
 
 		if (ctx->driver_data->has_vidoutcon)
@@ -1328,5 +1387,6 @@ struct platform_driver fimd_driver = {
 		.name	= "exynos4-fb",
 		.pm	= pm_ptr(&exynos_fimd_pm_ops),
 		.of_match_table = fimd_driver_dt_match,
+		.dev_groups = exynos_fimd_attr_groups,
 	},
 };
