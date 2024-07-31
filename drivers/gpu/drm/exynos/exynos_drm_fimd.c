@@ -1224,6 +1224,8 @@ static int fimd_probe(struct platform_device *pdev)
 	ctx->suspended = true;
 	ctx->driver_data = of_device_get_match_data(dev);
 
+	if (of_property_read_bool(dev->of_node, "samsung,vclk-free-run"))
+		ctx->vidcon0 |= VIDCON0_VCLKFREE;
 	if (of_property_read_bool(dev->of_node, "samsung,invert-vden"))
 		ctx->vidcon1 |= VIDCON1_INV_VDEN;
 	if (of_property_read_bool(dev->of_node, "samsung,invert-vclk"))
