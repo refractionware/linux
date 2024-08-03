@@ -1001,19 +1001,19 @@ static void samsung_dsim_set_display_mode(struct samsung_dsim *dsi)
 		hbp = max(hbp - 6, 0);
 		hsa = max(hsa - 6, 0);
 
-		dev_dbg(dsi->dev, "calculated hfp: %u, hbp: %u, hsa: %u",
+		dev_info(dsi->dev, "calculated hfp: %u, hbp: %u, hsa: %u",
 			hfp, hbp, hsa);
 
-		reg = DSIM_CMD_ALLOW(0xf)
+		reg = DSIM_CMD_ALLOW(6)
 			| DSIM_STABLE_VFP(m->vsync_start - m->vdisplay)
 			| DSIM_MAIN_VBP(m->vtotal - m->vsync_end);
 		samsung_dsim_write(dsi, DSIM_MVPORCH_REG, reg);
 
-		reg = DSIM_MAIN_HFP(hfp) | DSIM_MAIN_HBP(hbp);
+		reg = DSIM_MAIN_HFP(m->hsync_start - m->hdisplay) | DSIM_MAIN_HBP(m->htotal - m->hsync_end);
 		samsung_dsim_write(dsi, DSIM_MHPORCH_REG, reg);
 
 		reg = DSIM_MAIN_VSA(m->vsync_end - m->vsync_start)
-			| DSIM_MAIN_HSA(hsa);
+			| DSIM_MAIN_HSA(m->hsync_end - m->hsync_start);
 		samsung_dsim_write(dsi, DSIM_MSYNC_REG, reg);
 	}
 	reg =  DSIM_MAIN_HRESOL(m->hdisplay, num_bits_resol) |
@@ -1908,6 +1908,25 @@ static const struct drm_bridge_timings samsung_dsim_bridge_timings_de_low = {
 	.input_bus_flags = DRM_BUS_FLAG_DE_LOW,
 };
 
+static ssize_t dsim_dump_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct samsung_dsim *dsi = dev_get_drvdata(dev);
+	u32 reg_val, i;
+	char temp[50];
+
+	for (i = 0; i < 25; i++) {
+		reg_val = readl(dsi->reg_base + (i*4));
+		sprintf(temp,
+			"[DSIM]0x11C8_00%02X = 0x%08X\n",
+			(i*4), reg_val);
+		strcat(buf, temp);
+	}
+
+	return strlen(buf);
+}
+
+static DEVICE_ATTR_RO(dsim_dump);
+
 int samsung_dsim_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1983,6 +2002,12 @@ int samsung_dsim_probe(struct platform_device *pdev)
 		return ret;
 
 	platform_set_drvdata(pdev, dsi);
+
+	ret = device_create_file(dev, &dev_attr_dsim_dump);
+	if (ret) {
+		dev_err(dev, "failed to create dsim dump sysfs entry\n");
+		return ret;
+	}
 
 	pm_runtime_enable(dev);
 
