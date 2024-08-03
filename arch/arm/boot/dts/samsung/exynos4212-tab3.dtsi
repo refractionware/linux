@@ -482,6 +482,8 @@
 
 &fimd {
 	samsung,invert-vclk;
+	samsung,vclk-free-run;
+	samsung.vclk-hold-type = <2>;
 	status = "okay";
 };
 
