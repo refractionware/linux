@@ -162,7 +162,7 @@
 				};
 			};
 
-			charger {
+			max77693_charger: charger {
 				compatible = "maxim,max77693-charger";
 				monitored-battery = <&battery>;
 
@@ -192,6 +192,8 @@
 			interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&max77693_fuel_irq>;
+
+			power-supplies = <&max77693_charger>;
 
 			maxim,rsns-microohm = <10000>;
 			maxim,over-heat-temp = <500>;
