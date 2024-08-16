@@ -957,7 +957,7 @@ static void max77693_muic_irq_work(struct work_struct *work)
 	 * Clear currently reported status (starting from the end,
 	 * so that EXTCON_USB is cleared last)
 	 */
-	for (i = ARRAY_SIZE(max77693_extcon_cable); i >= 0; i--) {
+	for (i = (ARRAY_SIZE(max77693_extcon_cable) - 1); i >= 0; i--) {
 		cable_type = max77693_extcon_cable[i];
 		if (cable_type == EXTCON_NONE)
 			continue;
