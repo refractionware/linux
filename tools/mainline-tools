@@ -1,0 +1,129 @@
+#!/usr/bin/env -S echo 'Do not run this as a file! Use source instead.'
+
+# mainline-tools - provides commands for quick mainlining
+#
+# * mainline-build (mb) - runs "make -j`nproc`"
+# * mainline-package (mp) - packages the kernel into a boot.img
+# * mainline-flash (mf) - flashes the kernel to the device
+# * mainline-build-pmbootstrap (mbp) - build mainline kernel package with pmbootstrap, using kernel dir as source
+# * mainline-sideload (ms) - sideload kernel package built with pmbootstrap
+#
+# All packages, etc. are hardcoded. This is a script for personal use
+# and as such isn't very extendable; it is however very simple, so
+# feel free to modify it yourself!
+
+mainline-package() {
+	if [[ $1 ]]; then
+		local DEVICE
+		DEVICE=$1
+	fi
+	echo $DEVICE
+	if [ $DEVICE = 'samsung-baffinlite' ]; then
+		_dtb=broadcom/bcm23550-samsung-baffinlite
+		_dtbarch=arm
+		_image=arm/boot/zImage
+
+		_base="0x81e00000"
+		_second_offset="0x00f00000"
+		_kernel_offset="0x00008000"
+		_ramdisk_offset="0x01000000"
+		_tags_offset="0x00000100"
+		_pagesize="4096"
+
+	elif [ $DEVICE = 'samsung-lt01' ]; then
+		_dtb=samsung/exynos4212-tab3-wifi8
+		_dtbarch=arm
+		_image=arm/boot/zImage
+
+		_base="0x10000000"
+		_second_offset="0x00f00000"
+		_kernel_offset="0x00008000"
+		_ramdisk_offset="0x01000000"
+		_tags_offset="0x00000100"
+		_pagesize="2048"
+
+	elif [ $DEVICE = 'huawei-alice' ]; then
+		_dtb=hisilicon/hi6220-alice
+		_dtbarch=arm64
+		_image=arm64/boot/Image
+
+		_base="0x07478000"
+		_second_offset="0x00f00000"
+		_kernel_offset="0x00008000"
+		_ramdisk_offset="0x07b88000"
+		_tags_offset="0x02988000"
+		_pagesize="2048"
+
+	else
+		echo "Unrecognized device $DEVICE"
+		return 1
+
+	fi		
+
+	cat ~/code/linux/.output/arch/$_image ~/code/linux/.output/arch/$_dtbarch/boot/dts/$_dtb.dtb > ~/code/linux/.zImage-dtb
+	sudo cp ~/code/linux/.zImage-dtb  "$TEMP"/zImage
+	sudo cp "/tmp/postmarketOS-export/boot.img" "$TEMP/boot.img"
+	sudo cp "/tmp/postmarketOS-export/initramfs" "$TEMP/initramfs"
+	pmbootstrap chroot -- mkbootimg-osm0sis \
+--kernel "/tmp/mainline/zImage" \
+--ramdisk "/tmp/mainline/initramfs" \
+--base $_base \
+--second_offset $_second_offset \
+--kernel_offset $_kernel_offset \
+--ramdisk_offset $_ramdisk_offset \
+--tags_offset $_tags_offset \
+--pagesize $_pagesize \
+-o "/tmp/mainline/boot.img"
+
+	cp "$TEMP"/boot.img ~/code/linux/boot.img
+}
+
+mainline-flash() {
+	if [ $DEVICE = 'samsung-baffinlite' ]; then
+		sudo heimdall flash --KERNEL ~/code/linux/boot.img
+	elif [ $DEVICE = 'samsung-lt01' ]; then
+		sudo heimdall flash --BOOT ~/code/linux/boot.img
+	else
+		echo "Unrecognized device $DEVICE"
+		return 1
+	fi
+}
+
+mainline-package-3ds() {
+	cp ~/code/linux/.output/arch/arm/boot/zImage ~/linux3ds/linux/zImage
+	cp ~/code/linux/.output/arch/arm/boot/dts/nintendo3ds_ktr.dtb ~/linux3ds/linux/nintendo3ds_ktr.dtb
+}
+
+alias "mb=make -j`nproc`"
+alias "mf=mainline-flash"
+alias "mp=mainline-package"
+
+export DEVICE="$(pmbootstrap config device)"
+read -rep "[mainline-tools] Run initial setup? [Y/n] " tmp
+if [[ "$tmp" != "n" ]] && [[ "$tmp" != "N" ]]; then
+	cd ~/code/pmbootstrap
+	git pull
+	cd ~/code/linux
+	pmbootstrap export
+	pmbootstrap chroot -- apk add abootimg android-tools mkbootimg dtbtool
+	export WORK="$(pmbootstrap config work)"
+	export TEMP="$WORK/chroot_native/tmp/mainline/"
+	mkdir -p "$TEMP"
+	source ~/code/pmbootstrap/helpers/envkernel.sh
+	export mainlinetools='enabled'
+fi
+
+KERNEL_PACKAGE=linux-postmarketos-exynos4
+
+mainline-build-pmbootstrap() {
+	pmbootstrap build --envkernel $KERNEL_PACKAGE --src .
+	deactivate
+	source ~/code/pmbootstrap/helpers/envkernel.sh
+}
+
+mainline-sideload() {
+	pmbootstrap sideload $KERNEL_PACKAGE
+}
+
+alias mbp=mainline-build-pmbootstrap
+alias ms=mainline-sideload
