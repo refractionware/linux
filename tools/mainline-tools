@@ -11,6 +11,12 @@
 # All packages, etc. are hardcoded. This is a script for personal use
 # and as such isn't very extendable; it is however very simple, so
 # feel free to modify it yourself!
+#
+# This script expects the following code structure:
+# * ~/code/linux contains the Linux source code;
+# * ~/code/pmbootstrap contains the pmbootstrap source code.
+# It will automatically load envkernel and guess the selected device
+# based on the device selected in pmbootstrap init.
 
 mainline-package() {
 	if [[ $1 ]]; then
