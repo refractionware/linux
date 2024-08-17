@@ -8,12 +8,10 @@ This README contains a general explaination of each of the branches within.
 
 ## b4/*
 
-Patches as they are submitted to the mailing list; contain the most up-to-date and working versions of patches.
+Patches as they are submitted to the mailing list; contain the most up-to-date and WIP versions of patches.
 
-* `b4/midas-wm1811-gpio-jack`: upstreaming for `tab3/headset-detect` branch (contains the latest version of those patches!); currently on v4, https://lists.sr.ht/~postmarketos/upstreaming/patches/52939
-* `b4/max77693-charger-extcon`: upstreaming for the charger parts of `tab3/otg-take-2` (contains the latest version of those patches!); currently on v1 (v2 WIP is being pushed here), https://lists.sr.ht/~postmarketos/upstreaming/patches/53020
-* `b4/bcm21664-common`: "ARM: dts: bcm-mobile: Split out nodes used by both BCM21664 and BCM23550"; currently on v1, https://lists.sr.ht/~postmarketos/upstreaming/%3C20240605-bcm21664-common-v1-0-6386e9141eb6@gmail.com%3E (did not get detected as a patch for some reason?)
-* `b4/exynos-phy-extcon`: patch for extcon-based USB mode switch toggling, not sent yet
+* `b4/max77693-charger-extcon`: MAX77693 charger extcon + OTG support patches. https://lists.sr.ht/~postmarketos/upstreaming/patches/53020
+* `b4/exynos-phy-extcon`: patch for extcon-based USB mode switch toggling, not sent yet and likely won't be pending a better way to do this
 * `b4/bcm59054`: BCM59054 support + regulator driver fixes. Yet to be sent.
 * `b4/max17042-soc-threshold-fix`: Fix SOC threshold calculation on MAX17042. Yet to be sent.
 
