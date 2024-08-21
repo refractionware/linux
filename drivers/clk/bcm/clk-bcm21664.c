@@ -29,6 +29,12 @@ static struct ccu_data root_ccu_data = {
 
 /* AON CCU */
 
+static struct bus_clk_data hub_timer_apb_data = {
+	.policy		= POLICY(0x0010, 6),
+	.gate		= HW_SW_GATE(0x0414, 18, 3, 2),
+	.hyst		= HYST(0x0414, 10, 11),
+};
+
 static struct peri_clk_data hub_timer_data = {
 	.policy		= POLICY(0x0010, 6),
 	.gate		= HW_SW_GATE(0x0414, 16, 0, 1),
@@ -65,6 +71,8 @@ static struct ccu_data aon_ccu_data = {
 		.control	= CCU_POLICY_CTL(0x000c, 0, 1, 2),
 	},
 	.kona_clks	= {
+		[BCM21664_AON_CCU_HUB_TIMER_APB] =
+			KONA_CLK(aon, hub_timer_apb, bus),
 		[BCM21664_AON_CCU_HUB_TIMER] =
 			KONA_CLK(aon, hub_timer, peri),
 		[BCM21664_AON_CCU_PMU_BSC_APB] =
