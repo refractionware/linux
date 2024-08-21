@@ -341,6 +341,20 @@ static struct peri_clk_data bsc4_data = {
 	.trig		= TRIGGER(0x0afc, 19),
 };
 
+static struct bus_clk_data timers_apb_data = {
+	.policy		= POLICY(0x0010, 7),
+	.gate		= HW_SW_GATE(0x0434, 16, 1, 0),
+};
+
+static struct peri_clk_data timers_data = {
+	.policy		= POLICY(0x0010, 7),
+	.gate		= HW_SW_GATE(0x0434, 18, 3, 2),
+	.clocks		= CLOCKS("ref_1m",
+				 "ref_32k"),
+	.sel		= SELECTOR(0x0a78, 0, 2),
+	.trig		= TRIGGER(0x0afc, 20),
+};
+
 static struct ccu_data slave_ccu_data = {
 	BCM21664_CCU_COMMON(slave, SLAVE),
        .policy		= {
@@ -376,6 +390,10 @@ static struct ccu_data slave_ccu_data = {
 			KONA_CLK(slave, bsc3, peri),
 		[BCM21664_SLAVE_CCU_BSC4] =
 			KONA_CLK(slave, bsc4, peri),
+		[BCM21664_SLAVE_CCU_TIMERS_APB] =
+			KONA_CLK(slave, timers_apb, bus),
+		[BCM21664_SLAVE_CCU_TIMERS] =
+			KONA_CLK(slave, timers, peri),
 		[BCM21664_SLAVE_CCU_CLOCK_COUNT] = LAST_KONA_CLK,
 	},
 };
