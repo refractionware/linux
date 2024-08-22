@@ -32,20 +32,13 @@
 /* Each timer has 4 channels, each with its own IRQ. */
 #define MAX_NUM_CHANNELS		4
 
-/*
- * Trick for storing channel number and timer number in IRQ request devid:
- * We use the first 2 bits to store channel number (0-3), and the rest to
- * store the timer number (0-2).
- */
-#define TO_DEVID(timer, channel)	((channel & 0x00ff) + (timer << 2))
-#define DEVID_TO_TIMER(dev_id)		(dev_id >> 2)
-#define DEVID_TO_CHANNEL(dev_id)	(dev_id & 0x00ff)
-
 struct kona_bcm_timer_channel {
 	/* Number of parent timer in the timers struct */
 	unsigned int timer_id;
 	/* Number of channel, from 0 to 3 */
 	unsigned int id;
+	/* IRQ of the channel */
+	unsigned int irq;
 
 	bool has_clockevent;
 	struct clock_event_device clockevent;
@@ -54,16 +47,11 @@ struct kona_bcm_timer_channel {
 struct kona_bcm_timer {
 	char *name;
 
-	unsigned int num_channels;
-	unsigned int channel_irqs[MAX_NUM_CHANNELS]; /* Map channel number to IRQ */
 	unsigned int rate;
-
-	bool has_gptimer; /* Whether this timer is used for the GP timer */
-	u32 system_timer_channel; /* The channel used for the GP timer */
+	void __iomem *base;
 
 	struct kona_bcm_timer_channel channels[MAX_NUM_CHANNELS];
-
-	void __iomem *base;
+	unsigned int num_channels;
 };
 
 static struct kona_bcm_timer *timers[MAX_NUM_TIMERS];
@@ -85,20 +73,20 @@ clockevent_to_channel(struct clock_event_device *evt)
  * We use the peripheral timers for system tick, the cpu global timer for
  * profile tick
  */
-static void kona_timer_disable_and_clear(void __iomem *base, int channel_num)
+static void kona_timer_disable_and_clear(void __iomem *base, int ch_num)
 {
 	uint32_t reg;
 
-	/*
-	 * clear and disable interrupts
-	 * We are using compare/match register 0 for our system interrupts
-	 */
 	reg = readl(base + KONA_GPTIMER_STCS_OFFSET);
 
+	/* Make sure we're servicing the correct interrupt */
+	if (!(reg & (1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + ch_num))))
+		return;
+
 	/* Clear compare (0) interrupt */
-	reg |= 1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + channel_num);
+	reg |= 1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + ch_num);
 	/* disable compare */
-	reg &= ~(1 << (KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT + channel_num));
+	reg &= ~(1 << (KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT + ch_num));
 
 	writel(reg, base + KONA_GPTIMER_STCS_OFFSET);
 
@@ -160,7 +148,8 @@ static int kona_timer_set_next_event(unsigned long clc,
 		return ret;
 
 	/* Load the "next" event tick value */
-	writel(lsw + clc, timer->base + KONA_GPTIMER_STCM0_OFFSET);
+	writel(lsw + clc,
+	       timer->base + KONA_GPTIMER_STCM0_OFFSET + channel->id * 4);
 
 	/* Enable compare */
 	reg = readl(timer->base + KONA_GPTIMER_STCS_OFFSET);
@@ -187,6 +176,7 @@ kona_timer_clockevents_init(struct kona_bcm_timer *timer,
 	channel->clockevent.set_next_event = kona_timer_set_next_event;
 	channel->clockevent.set_state_shutdown = kona_timer_shutdown;
 	channel->clockevent.tick_resume = kona_timer_shutdown;
+	channel->clockevent.irq = channel->irq;
 	channel->clockevent.cpumask = cpumask_of(0);
 
 	channel->has_clockevent = true;
@@ -197,9 +187,8 @@ kona_timer_clockevents_init(struct kona_bcm_timer *timer,
 
 static irqreturn_t kona_timer_interrupt(int irq, void *dev_id)
 {
-	struct kona_bcm_timer *timer = timers[DEVID_TO_TIMER((int)dev_id)];
-	struct kona_bcm_timer_channel *channel = \
-		&timer->channels[DEVID_TO_CHANNEL((int)dev_id)];
+	struct kona_bcm_timer_channel *channel = dev_id;
+	struct kona_bcm_timer *timer = channel_to_timer(channel);
 
 	kona_timer_disable_and_clear(timer->base, channel->id);
 	if (channel->has_clockevent)
@@ -211,9 +200,8 @@ static int __init kona_timer_init(struct device_node *node)
 {
 	struct kona_bcm_timer *timer;
 	struct clk *external_clk;
-	u32 system_timer_channel;
-	u32 freq;
 	unsigned int i;
+	u32 freq;
 
 	if ((num_timers + 1) >= MAX_NUM_TIMERS) {
 		pr_err("kona-timer: exceeded maximum number of timers (%d)\n",
@@ -239,25 +227,34 @@ static int __init kona_timer_init(struct device_node *node)
 	}
 
 	/*
-	 * Setup IRQs for all channels. Each channel has 1 IRQ, so we can
-	 * guess the defined channel count just by looking at how many IRQs
-	 * are defined.
+	 * Each channel has one IRQ; the amount of channels is thus taken from
+	 * the IRQ count.
 	 */
 	timer->num_channels = of_irq_count(node);
-	BUG_ON(timer->num_channels > MAX_NUM_CHANNELS);
+	if (timer->num_channels == 0) {
+		pr_err("kona-timer: no interrupts provided\n");
+		goto err_free_timer;
+	} else if (timer->num_channels > MAX_NUM_CHANNELS) {
+		pr_err("kona-timer: too many interrupts provided, capping out at %d",
+			MAX_NUM_CHANNELS);
+		timer->num_channels = MAX_NUM_CHANNELS;
+	};
 
-	pr_info("kona-timer: timer %d, %d channels", num_timers, timer->num_channels);
+	pr_debug("kona-timer: initializing timer %d, %d channels\n",
+		 num_timers, timer->num_channels);
 
+	/* Set up channels */
 	for (i = 0; i < timer->num_channels; i++) {
-		timer->channel_irqs[i] = irq_of_parse_and_map(node, i);
-		if (request_irq(timer->channel_irqs[i], kona_timer_interrupt,
-				IRQF_TIMER, "Kona Timer Tick", (void *)TO_DEVID(num_timers, i)))
-			pr_err("kona-timer: request_irq() failed\n");
-
-		/* Set up channel struct */
 		timer->channels[i].id = i;
 		timer->channels[i].timer_id = num_timers;
-		timer->channels[i].has_clockevent = false;
+
+		timer->channels[i].irq = irq_of_parse_and_map(node, i);
+		if (request_irq(timer->channels[i].irq, kona_timer_interrupt,
+				IRQF_TIMER, "Kona Timer Tick",
+				&timer->channels[i])) {
+			pr_err("kona-timer: request_irq() failed\n");
+			goto err_free_irqs;
+		}
 	}
 
 	/* Setup IO address */
@@ -265,6 +262,7 @@ static int __init kona_timer_init(struct device_node *node)
 
 	/* Add the timer pointer to the list of timers */
 	timers[num_timers] = timer;
+	num_timers++;
 
 	/* Initialize the timer */
 	for (i = 0; i < timer->num_channels; i++) {
@@ -275,9 +273,14 @@ static int __init kona_timer_init(struct device_node *node)
 					&timer->channels[i].clockevent);
 	};
 
-	num_timers++;
-
 	return 0;
+
+err_free_irqs:
+	while (i != 0) {
+		i--;
+		free_irq(timer->channels[i].irq, &timer->channels[i]);
+	}
+
 err_free_timer:
 	kfree(timer);
 	return -EINVAL;
