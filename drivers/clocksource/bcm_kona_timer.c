@@ -151,8 +151,9 @@ static int kona_timer_set_next_event(unsigned long clc,
 	writel(lsw + clc,
 	       timer->base + KONA_GPTIMER_STCM0_OFFSET + channel->id * 4);
 
-	/* Enable compare */
+	/* Set timer match bit and enable compare. */
 	reg = readl(timer->base + KONA_GPTIMER_STCS_OFFSET);
+	reg |= (1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + channel->id));
 	reg |= (1 << (KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT + channel->id));
 	writel(reg, timer->base + KONA_GPTIMER_STCS_OFFSET);
 
