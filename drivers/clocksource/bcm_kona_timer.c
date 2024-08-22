@@ -52,6 +52,9 @@ struct kona_bcm_timer {
 	unsigned int rate;
 	void __iomem *base;
 
+	bool is_initialized;
+	int ev_cnt;
+
 	struct kona_bcm_timer_channel channels[MAX_NUM_CHANNELS];
 	unsigned int num_channels;
 };
@@ -226,13 +229,13 @@ kona_timer_clockevents_init(struct kona_bcm_timer *timer,
 	channel->clockevent.set_next_event = kona_timer_set_next_event;
 	channel->clockevent.set_state_shutdown = kona_timer_shutdown;
 	channel->clockevent.tick_resume = kona_timer_shutdown;
-	/*channel->clockevent.irq = channel->irq;*/
-	channel->clockevent.cpumask = cpumask_of(0);
-
-	channel->has_clockevent = true;
+	channel->clockevent.irq = channel->irq;
+	channel->clockevent.cpumask = cpumask_of(smp_processor_id());
 
 	clockevents_config_and_register(&channel->clockevent,
 		timer->rate, 6, 0xffffffff);
+
+	channel->has_clockevent = true;
 }
 
 static irqreturn_t kona_timer_interrupt(int irq, void *dev_id)
@@ -251,8 +254,10 @@ static irqreturn_t kona_timer_interrupt(int irq, void *dev_id)
 	}
 
 	kona_timer_disable_and_clear(timer->base, channel->id);
-	if (channel->has_clockevent)
+	if (channel->has_clockevent && timer->ev_cnt > 1)
 		channel->clockevent.event_handler(&channel->clockevent);
+	else
+		timer->ev_cnt++;
 	return IRQ_HANDLED;
 }
 
@@ -334,6 +339,7 @@ static int __init kona_timer_init(struct device_node *node)
 	};
 
 	num_timers++;
+	timer->is_initialized = true;
 
 	return 0;
 
