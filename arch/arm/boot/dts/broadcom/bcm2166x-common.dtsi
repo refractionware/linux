@@ -104,6 +104,16 @@
 			status = "disabled";
 		};
 
+		/*periph_timer: timer@d000 {
+			compatible = "brcm,kona-timer";
+			reg = <0x0000d000 0x1c>;
+			interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 52 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&slave_ccu BCM21664_SLAVE_CCU_TIMERS>;
+		};*/
+
 		bsc1: i2c@16000 {
 			/* Compatible filled by SoC DTSI */
 			reg = <0x00016000 0x70>;
@@ -336,7 +346,9 @@
 					     "bsc1",
 					     "bsc2",
 					     "bsc3",
-					     "bsc4";
+					     "bsc4",
+					     "timers_apb",
+					     "timers";
 		};
 
 		master_ccu: master_ccu@3f001000 {

@@ -50,6 +50,18 @@
 	};
 };
 
+&hub {
+		core_timer: timer@100a800 {
+			compatible = "brcm,kona-timer";
+			reg = <0x0100a800 0x1c>;
+			interrupts = <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 212 IRQ_TYPE_LEVEL_HIGH>,
+						<GIC_SPI 213 IRQ_TYPE_LEVEL_HIGH>;
+			clock-frequency = <32768>;
+		};
+};
+
 &apps {
 		cdc: cdc@1b0e000 {
 			compatible = "brcm,bcm23550-cdc";
