@@ -69,6 +69,7 @@ struct kona_bcm_timer {
 static struct kona_bcm_timer *timers[MAX_NUM_TIMERS];
 static int num_timers = 0; /* Count of currently initialized timers */
 static int last_lsw = 0;
+static DEFINE_SPINLOCK(kona_timer_lock);
 
 static inline struct kona_bcm_timer *
 channel_to_timer(struct kona_bcm_timer_channel *channel)
@@ -140,7 +141,10 @@ kona_wait_for_compare_enable_sync(void __iomem *base, int ch_num, int target)
  */
 static void kona_timer_disable_and_clear(void __iomem *base, int ch_num)
 {
+	unsigned long flags;
 	uint32_t reg;
+
+	spin_lock_irqsave(&kona_timer_lock, flags);
 
 	reg = readl(base + KONA_GPTIMER_STCS_OFFSET);
 
@@ -152,6 +156,8 @@ static void kona_timer_disable_and_clear(void __iomem *base, int ch_num)
 	writel(reg, base + KONA_GPTIMER_STCS_OFFSET);
 
 	kona_wait_for_compare_enable_sync(base, ch_num, 0);
+
+	spin_unlock_irqrestore(&kona_timer_lock, flags);
 }
 
 static int
@@ -201,13 +207,18 @@ static int kona_timer_set_next_event(unsigned long clc,
 
 	struct kona_bcm_timer_channel *channel = clockevent_to_channel(evt);
 	struct kona_bcm_timer *timer = channel_to_timer(channel);
+	unsigned long flags;
 	uint32_t lsw, msw;
 	uint32_t reg;
 	int ret;
 
+	pr_info("kona-timer: timer event for %d start", channel->id);
+
 	ret = kona_timer_get_counter(timer->base, &msw, &lsw);
 	if (ret)
 		return ret;
+
+	spin_lock_irqsave(&kona_timer_lock, flags);
 
 	/* Load the "next" event tick value */
 	writel(lsw + clc,
@@ -225,6 +236,9 @@ static int kona_timer_set_next_event(unsigned long clc,
 	/* Wait for compare enable to sync */
 	kona_wait_for_compare_enable_sync(timer->base, channel->id, 1);
 
+	spin_unlock_irqrestore(&kona_timer_lock, flags);
+
+	pr_info("kona-timer: timer event for %d", channel->id);
 	//kona_timer_dump(timer);
 
 	return 0;
@@ -269,18 +283,10 @@ kona_timer_clockevents_init(struct kona_bcm_timer *timer,
 
 static irqreturn_t kona_timer_interrupt(int irq, void *dev_id)
 {
-	if (!dev_id) {
-		pr_err("kona-timer: no dev_id\n");
-		return IRQ_HANDLED;
-	}
-
 	struct kona_bcm_timer_channel *channel = dev_id;
 	struct kona_bcm_timer *timer = channel_to_timer(channel);
 
-	if (!timer) {
-		pr_err("kona-timer: no timer\n");
-		return IRQ_HANDLED;
-	}
+	pr_info("kona-timer: interrupt for timer %u channel %u", timer->id, channel->id);
 
 	kona_timer_disable_and_clear(timer->base, channel->id);
 	if (channel->has_clockevent)
@@ -399,7 +405,7 @@ static int __init kona_timer_init(struct device_node *node)
 
 	/* hack */
 	timer->is_gptimer = true;
-	timer->num_channels = 1;
+	timer->num_channels = 2;
 
 	pr_info("kona-timer: initializing timer %d, %d channels, rate %d\n",
 		 num_timers, timer->num_channels, timer->rate);
@@ -407,16 +413,13 @@ static int __init kona_timer_init(struct device_node *node)
 	/* Add the timer pointer to the list of timers */
 	timers[num_timers] = timer;
 
+	if (timer->is_gptimer)
+		kona_timer_clocksource_init(timer);
+
 	/* Initialize the timer */
 	for (i = 0; i < timer->num_channels; i++) {
 		timer->channels[i].id = i;
 		timer->channels[i].timer_id = num_timers;
-
-		kona_timer_disable_and_clear(timer->base, i);
-		kona_timer_clockevents_init(timer,
-					&timer->channels[i]);
-		kona_timer_set_next_event((timer->rate / HZ),
-					&timer->channels[i].clockevent);
 
 		timer->channels[i].irq = irq_of_parse_and_map(node, i);
 		if (request_irq(timer->channels[i].irq, kona_timer_interrupt,
@@ -425,10 +428,13 @@ static int __init kona_timer_init(struct device_node *node)
 			pr_err("kona-timer: request_irq() failed\n");
 			goto err_free_irqs;
 		}
-	};
 
-	if (timer->is_gptimer)
-		kona_timer_clocksource_init(timer);
+		kona_timer_disable_and_clear(timer->base, i);
+		kona_timer_clockevents_init(timer,
+					&timer->channels[i]);
+		kona_timer_set_next_event((timer->rate / HZ),
+					&timer->channels[i].clockevent);
+	};
 
 	num_timers++;
 	timer->is_initialized = true;
