@@ -8,6 +8,7 @@
 #include <linux/clockchips.h>
 #include <linux/types.h>
 #include <linux/clk.h>
+#include <linux/sched_clock.h>
 
 #include <linux/io.h>
 
@@ -48,6 +49,7 @@ struct kona_bcm_timer_channel {
 
 struct kona_bcm_timer {
 	char *name;
+	unsigned int id;
 
 	unsigned int rate;
 	void __iomem *base;
@@ -55,12 +57,18 @@ struct kona_bcm_timer {
 	bool is_initialized;
 	int ev_cnt;
 
+	bool has_clocksource;
+	struct clocksource clocksource;
+
+	bool is_gptimer;
+
 	struct kona_bcm_timer_channel channels[MAX_NUM_CHANNELS];
 	unsigned int num_channels;
 };
 
 static struct kona_bcm_timer *timers[MAX_NUM_TIMERS];
 static int num_timers = 0; /* Count of currently initialized timers */
+static int last_lsw = 0;
 
 static inline struct kona_bcm_timer *
 channel_to_timer(struct kona_bcm_timer_channel *channel)
@@ -72,6 +80,23 @@ static inline struct kona_bcm_timer_channel *
 clockevent_to_channel(struct clock_event_device *evt)
 {
 	return container_of(evt, struct kona_bcm_timer_channel, clockevent);
+}
+
+static inline struct kona_bcm_timer *
+clocksource_to_timer(struct clocksource *src)
+{
+	return container_of(src, struct kona_bcm_timer, clocksource);
+}
+
+static void kona_timer_dump(struct kona_bcm_timer *timer)
+{
+	pr_info("kona-timer[%d]: SCTS  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCS_OFFSET));
+	pr_info("kona-timer[%d]: SCTLO  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCLO_OFFSET));
+	pr_info("kona-timer[%d]: SCTHI  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCHI_OFFSET));
+	pr_info("kona-timer[%d]: SCTM0  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCM0_OFFSET));
+	pr_info("kona-timer[%d]: SCTM1  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCM0_OFFSET + 0x04));
+	pr_info("kona-timer[%d]: SCTM2  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCM0_OFFSET + 0x08));
+	pr_info("kona-timer[%d]: SCTM3  = %x", timer->id, readl(timer->base + KONA_GPTIMER_STCM0_OFFSET + 0x0c));
 }
 
 /* Wait for the new compare value to be loaded */
@@ -118,10 +143,6 @@ static void kona_timer_disable_and_clear(void __iomem *base, int ch_num)
 	uint32_t reg;
 
 	reg = readl(base + KONA_GPTIMER_STCS_OFFSET);
-
-	/* Make sure we're servicing the correct interrupt */
-	if (!(reg & (1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + ch_num))))
-		return;
 
 	/* Clear compare (0) interrupt */
 	reg |= 1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + ch_num);
@@ -190,7 +211,7 @@ static int kona_timer_set_next_event(unsigned long clc,
 
 	/* Load the "next" event tick value */
 	writel(lsw + clc,
-	       timer->base + KONA_GPTIMER_STCM0_OFFSET + channel->id * 4);
+	       timer->base + KONA_GPTIMER_STCM0_OFFSET + (channel->id * 4));
 
 	/* Wait for the value to sync */
 	kona_wait_for_compare_val_sync(timer->base, channel->id);
@@ -200,6 +221,11 @@ static int kona_timer_set_next_event(unsigned long clc,
 	reg |= (1 << (KONA_GPTIMER_STCS_TIMER_MATCH_SHIFT + channel->id));
 	reg |= (1 << (KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT + channel->id));
 	writel(reg, timer->base + KONA_GPTIMER_STCS_OFFSET);
+
+	/* Wait for compare enable to sync */
+	kona_wait_for_compare_enable_sync(timer->base, channel->id, 1);
+
+	//kona_timer_dump(timer);
 
 	return 0;
 }
@@ -229,11 +255,14 @@ kona_timer_clockevents_init(struct kona_bcm_timer *timer,
 	channel->clockevent.set_next_event = kona_timer_set_next_event;
 	channel->clockevent.set_state_shutdown = kona_timer_shutdown;
 	channel->clockevent.tick_resume = kona_timer_shutdown;
+	//channel->clockevent.rating = 450 + (num_timers * 4) + channel->id;
 	channel->clockevent.irq = channel->irq;
 	channel->clockevent.cpumask = cpumask_of(smp_processor_id());
 
 	clockevents_config_and_register(&channel->clockevent,
 		timer->rate, 6, 0xffffffff);
+
+	pr_info("kona-timer: clockevent min_delta_ns %llu, max %llu, ticks min %lu max %lu", channel->clockevent.min_delta_ns, channel->clockevent.max_delta_ns, channel->clockevent.min_delta_ticks, channel->clockevent.max_delta_ticks);
 
 	channel->has_clockevent = true;
 }
@@ -254,11 +283,53 @@ static irqreturn_t kona_timer_interrupt(int irq, void *dev_id)
 	}
 
 	kona_timer_disable_and_clear(timer->base, channel->id);
-	if (channel->has_clockevent && timer->ev_cnt > 1)
+	if (channel->has_clockevent)
 		channel->clockevent.event_handler(&channel->clockevent);
-	else
-		timer->ev_cnt++;
 	return IRQ_HANDLED;
+}
+
+static u64 kona_timer_clocksrc_read(struct clocksource *src)
+{
+	struct kona_bcm_timer *timer = clocksource_to_timer(src);
+	uint32_t lsw, msw;
+
+	kona_timer_get_counter(timer->base, &msw, &lsw);
+
+	return ((u64)msw << 32) + lsw;
+}
+
+static u64 notrace kona_read_sched_clock(void)
+{
+	uint32_t lsw, msw;
+
+	kona_timer_get_counter(timers[0]->base, &msw, &lsw);
+
+	//return ((u64)msw << 32) + lsw;
+
+	/*if (last_lsw != lsw) {
+		pr_info("lsw change from %d to %d", last_lsw, lsw);
+		kona_timer_dump(timers[0]);
+		last_lsw = lsw;
+	}*/
+
+	return lsw;
+}
+
+static void __init
+kona_timer_clocksource_init(struct kona_bcm_timer *timer)
+{
+	timer->clocksource.name = "Kona System Timer (source)";
+	timer->clocksource.read = kona_timer_clocksrc_read;
+	timer->clocksource.mask = CLOCKSOURCE_MASK(64);
+	timer->clocksource.flags = CLOCK_SOURCE_IS_CONTINUOUS;
+	timer->clocksource.rating = 400;
+	timer->clocksource.shift = 16;
+	timer->clocksource.mult = clocksource_hz2mult(timer->rate, timer->clocksource.shift);
+
+	timer->has_clocksource = true;
+	clocksource_register_hz(&timer->clocksource, timer->rate);
+
+	sched_clock_register(kona_read_sched_clock, 32, timer->rate);
 }
 
 static int __init kona_timer_init(struct device_node *node)
@@ -267,6 +338,10 @@ static int __init kona_timer_init(struct device_node *node)
 	struct clk *external_clk;
 	unsigned int i;
 	u32 freq;
+
+	/* hack */
+	if (num_timers > 0)
+		return 0;
 
 	if ((num_timers + 1) >= MAX_NUM_TIMERS) {
 		pr_err("kona-timer: exceeded maximum number of timers (%d)\n",
@@ -279,12 +354,18 @@ static int __init kona_timer_init(struct device_node *node)
 	if (!timer)
 		return -ENOMEM;
 
+	timer->id = num_timers;
+
 	external_clk = of_clk_get_by_name(node, NULL);
 
+	of_property_read_u32(node, "clock-frequency", &freq);
+
 	if (!IS_ERR(external_clk)) {
+		if (freq)
+			clk_set_rate(external_clk, freq);
 		timer->rate = clk_get_rate(external_clk);
 		clk_prepare_enable(external_clk);
-	} else if (!of_property_read_u32(node, "clock-frequency", &freq)) {
+	} else if (freq) {
 		timer->rate = freq;
 	} else {
 		pr_err("kona-timer: unable to determine clock-frequency\n");
@@ -297,6 +378,10 @@ static int __init kona_timer_init(struct device_node *node)
 		pr_err("kona-timer: unable to map base\n");
 		goto err_free_timer;
 	}
+
+	timer->is_gptimer = of_property_read_bool(node, "brcm,is-gptimer");
+	if (timer->is_gptimer)
+		pr_info("kona-timer: timer %d is gptimer", num_timers);
 
 	/*
 	 * Each channel has one IRQ; the amount of channels is thus taken from
@@ -312,8 +397,12 @@ static int __init kona_timer_init(struct device_node *node)
 		timer->num_channels = MAX_NUM_CHANNELS;
 	};
 
-	pr_debug("kona-timer: initializing timer %d, %d channels\n",
-		 num_timers, timer->num_channels);
+	/* hack */
+	timer->is_gptimer = true;
+	timer->num_channels = 1;
+
+	pr_info("kona-timer: initializing timer %d, %d channels, rate %d\n",
+		 num_timers, timer->num_channels, timer->rate);
 
 	/* Add the timer pointer to the list of timers */
 	timers[num_timers] = timer;
@@ -337,6 +426,9 @@ static int __init kona_timer_init(struct device_node *node)
 			goto err_free_irqs;
 		}
 	};
+
+	if (timer->is_gptimer)
+		kona_timer_clocksource_init(timer);
 
 	num_timers++;
 	timer->is_initialized = true;
