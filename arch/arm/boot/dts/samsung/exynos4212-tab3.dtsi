@@ -269,6 +269,24 @@
 		};
 	};
 
+	i2c_ir: i2c-gpio-6 {
+		compatible = "i2c-gpio";
+		sda-gpios = <&gpy0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpy0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		irled: irled@50 {
+			compatible = "abov,mc96fr332a-ir-tx";
+			reg = <0x50>;
+
+			wake-gpios = <&gpl0 3 GPIO_ACTIVE_HIGH>;
+			ldo-supply = <&ldo19_reg>;
+			vdd-supply = <&irtx_reg>;
+		};
+	};
+
 	vbatt_reg: voltage-regulator-1 {
 		compatible = "regulator-fixed";
 		regulator-name = "VBATT";
@@ -316,6 +334,16 @@
 		pinctrl-0 = <&emmc_enable>;
 		gpio = <&gpk0 2 GPIO_ACTIVE_HIGH>; /* eMMC_EN */
 		enable-active-high;
+	};
+
+	irtx_reg: voltage-regulator-6 {
+		compatible = "regulator-fixed";
+		regulator-name = "IRDA_1.9V";
+		regulator-min-microvolt = <1900000>;
+		regulator-max-microvolt = <1900000>;
+		gpio = <&gpj0 3 GPIO_ACTIVE_HIGH>; /* eMMC_EN */
+		enable-active-high;
+		regulator-always-on;
 	};
 
 	battery: battery {
