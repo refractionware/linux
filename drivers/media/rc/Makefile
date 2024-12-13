@@ -36,6 +36,7 @@ obj-$(CONFIG_IR_IMG) += img-ir/
 obj-$(CONFIG_IR_IMON) += imon.o
 obj-$(CONFIG_IR_IMON_RAW) += imon_raw.o
 obj-$(CONFIG_IR_ITE_CIR) += ite-cir.o
+obj-$(CONFIG_IR_MC96FR332A_TX) += mc96fr332a-ir-tx.o
 obj-$(CONFIG_IR_MCEUSB) += mceusb.o
 obj-$(CONFIG_IR_MESON) += meson-ir.o
 obj-$(CONFIG_IR_MESON_TX) += meson-ir-tx.o
