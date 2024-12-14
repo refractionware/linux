@@ -26,6 +26,7 @@ struct mc96fr332a_ir_tx {
 	struct device *dev;
 
 	struct gpio_desc *wake_gpio;
+	struct gpio_desc *status_gpio;
 	struct regulator *ldo_regulator;
 	struct regulator *vdd_regulator;
 
@@ -85,7 +86,7 @@ static int mc96fr332a_ir_tx_get_fw_version(struct mc96fr332a_ir_tx *mc96)
 
 	ret = i2c_smbus_read_i2c_block_data(client, 0x00, 8, buf);
 	if (ret < 0) {
-		dev_err(&client->dev, "Failed to get firmware version: %d", ret);
+		dev_err(&client->dev, "Failed to get firmware version: %d\n", ret);
 		return ret;
 	}
 
@@ -100,7 +101,7 @@ static bool mc96fr332a_ir_tx_verify_fw_checksum(struct mc96fr332a_ir_tx *mc96)
 
 	ret = i2c_smbus_read_i2c_block_data(client, 0x00, 8, buf);
 	if (ret < 0) {
-		dev_err(&client->dev, "Failed to get firmware checksum: %d", ret);
+		dev_err(&client->dev, "Failed to get firmware checksum: %d\n", ret);
 		return ret;
 	}
 
@@ -113,6 +114,22 @@ static bool mc96fr332a_ir_tx_verify_fw_checksum(struct mc96fr332a_ir_tx *mc96)
 
 	return (checksum_a == checksum_b);
 }
+
+/* TODO: debug function, remove this */
+/*static void mc96fr332a_ir_tx_print_buffer(struct mc96fr332a_ir_tx *mc96)
+{
+	struct i2c_client *client = mc96->client;
+	int ret;
+	u8 buf[8];
+
+	ret = i2c_smbus_read_i2c_block_data(client, 0x00, 8, buf);
+	if (ret < 0) {
+		dev_err(&client->dev, "Failed to get buffer for printing: %d\n", ret);
+		return;
+	}
+
+	dev_info(mc96->dev, "Current buffer: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+}*/
 
 /* TODO: move firmware out of the kernel */
 static int mc96fr332a_ir_tx_update_fw(struct mc96fr332a_ir_tx *mc96) {
@@ -231,45 +248,52 @@ static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
 		      unsigned int count)
 {
 	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
-	unsigned int bufsize = (count * 4) + 7; /* 2 + 3 + (count * 4) + 2 */
+	unsigned int bufsize = (count * 2) + 7; /* 2 + 3 + (count * 2) + 2 */
 	int checksum = 0;
 	int i, ret;
 
-	if ((bufsize > 2048) || (count > 0xFFFF)) {
+	dev_info(&rc_dev->dev, "received transfer of count %d, freq %d\n", count, mc96->carrier);
+
+	if ((bufsize > 2048)) {
 		dev_err(&rc_dev->dev, "Transfer buffer too large\n");
 		return -EINVAL;
 	}
 
-	/* Count: 2 bytes */
-	mc96->i2c_buf[0] = (count >> 8) & 0xFF;
-	mc96->i2c_buf[1] = count & 0xFF;
+	/* Message length (including itself, excluding checksum): 2 bytes */
+	mc96->i2c_buf[0] = ((bufsize - 2) >> 8) & 0xFF;
+	mc96->i2c_buf[1] = (bufsize - 2) & 0xFF;
 
 	/* Frequency: 3 bytes */
 	mc96->i2c_buf[2] = (mc96->carrier >> 16) & 0xFF;
 	mc96->i2c_buf[3] = (mc96->carrier >> 8) & 0xFF;
 	mc96->i2c_buf[4] = mc96->carrier & 0xFF;
 
-	/* Signal: 2 bytes each (TODO: this is probably wrong) */
-	/*for (i = 0; i < (count / 4); i++) {
-		mc96->i2c_buf[5 + (i * 4)]     = (txbuf[i] >> 24) & 0xFF;
-		mc96->i2c_buf[5 + (i * 4) + 1] = (txbuf[i] >> 16) & 0xFF;
-		mc96->i2c_buf[5 + (i * 4) + 2] = (txbuf[i] >> 8) & 0xFF;
-		mc96->i2c_buf[5 + (i * 4) + 3] = txbuf[i] & 0xFF;
-	}*/
+	/* Signal: 2 bytes each */
 	for (i = 0; i < count; i++) {
 		if (txbuf[i] > 0xFFFF) {
 			dev_err(&rc_dev->dev, "Transfer value too large\n");
 			return -EINVAL;
 		}
 
-		mc96->i2c_buf[5 + i] = txbuf[i];
-		checksum += txbuf[i];
+		mc96->i2c_buf[5 + (i * 2)]     = (txbuf[i] >> 8) & 0xFF;
+		mc96->i2c_buf[5 + (i * 2) + 1] = (txbuf[i]) & 0xFF;
 	}
 
 	/* Checksum: last 2 bytes */
+	for (i = 0; i < (bufsize - 2); i++) {
+		checksum += mc96->i2c_buf[i];
+		dev_info(mc96->dev, "%d:%x\n", i, mc96->i2c_buf[i]);
+	}
+
 	mc96->i2c_buf[bufsize - 2] = (checksum >> 8) & 0xFF;
 	mc96->i2c_buf[bufsize - 1] = checksum & 0xFF;
 
+	dev_info(mc96->dev, "%d:%x\n", bufsize-2, mc96->i2c_buf[bufsize-2]);
+	dev_info(mc96->dev, "%d:%x\n", bufsize-1, mc96->i2c_buf[bufsize-1]);
+
+	/* Wake up the transmitter and send the prepared data */
+	mc96fr332a_ir_tx_set_wake(mc96, 0);
+	udelay(200);
 	mc96fr332a_ir_tx_set_wake(mc96, 1);
 	msleep(30);
 
@@ -277,11 +301,43 @@ static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
 	ret = i2c_master_send(mc96->client, mc96->i2c_buf, bufsize);
 	if (ret < 0) {
 		dev_err(&rc_dev->dev, "Failed to write IR transfer data (%d)\n", ret);
+		return ret;
 	}
 
-	mc96fr332a_ir_tx_set_wake(mc96, 0);
+	dev_info(&rc_dev->dev, "IR transfer data written\n");
 
-	/* TODO: add IRQs */
+	mdelay(10);
+
+	ret = gpiod_get_value(mc96->status_gpio);
+	if (ret < 0) {
+		dev_err(&rc_dev->dev, "Failed to get state of transfer\n");
+		return -EINVAL;
+	} else if (ret == 1) {
+		dev_err(&rc_dev->dev, "Transfer checksum is not OK\n");
+		return -EINVAL;
+	}
+
+	i = 5;
+	while (i > 0) {
+		msleep(1000 * (checksum / mc96->carrier));
+		ret = gpiod_get_value(mc96->status_gpio);
+		if (ret < 0) {
+			dev_err(&rc_dev->dev, "Failed to get state of transfer\n");
+			return -EINVAL;
+		}
+
+		dev_info(&rc_dev->dev, "Transfer status: %d\n", ret);
+
+		if (ret == 1) {
+			break;
+		}
+		i--;
+	}
+
+	if (ret == 0)
+		dev_err(&rc_dev->dev, "Transfer failed");
+
+	mc96fr332a_ir_tx_set_wake(mc96, 0);
 
 	return 0;
 }
@@ -302,15 +358,30 @@ static int mc96fr332a_ir_tx_set_carrier(struct rc_dev *rc_dev, u32 carrier)
 static int mc96fr332a_ir_tx_open(struct rc_dev *rc_dev)
 {
 	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
+	int ret;
 
-	return mc96fr332a_ir_tx_power_on(mc96);
+	mc96fr332a_ir_tx_set_wake(mc96, 1);
+	ret = mc96fr332a_ir_tx_power_on(mc96);
+	if (ret < 0) {
+		dev_err(mc96->dev, "Failed to power on: %d\n", ret);
+		return ret;
+	}
+
+	msleep(30);
+
+	dev_info(mc96->dev, "opened device\n");
+
+	return 0;
 }
 
 static void mc96fr332a_ir_tx_close(struct rc_dev *rc_dev)
 {
 	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
 
-	mc96fr332a_ir_tx_power_off(mc96);
+	//mc96fr332a_ir_tx_power_off(mc96);
+	msleep(10);
+
+	dev_info(mc96->dev, "closed device\n");
 }
 
 static int mc96fr332a_ir_tx_probe(struct i2c_client *client)
@@ -338,6 +409,11 @@ static int mc96fr332a_ir_tx_probe(struct i2c_client *client)
 	if (IS_ERR(mc96->wake_gpio))
 		return dev_err_probe(dev, PTR_ERR(mc96->wake_gpio),
 				     "Failed to get wake GPIO\n");
+
+	mc96->status_gpio = devm_gpiod_get(dev, "status", GPIOD_IN);
+	if (IS_ERR(mc96->status_gpio))
+		return dev_err_probe(dev, PTR_ERR(mc96->status_gpio),
+				     "Failed to get status GPIO\n");
 
 	mc96->ldo_regulator = devm_regulator_get(dev, "ldo");
 	if (IS_ERR(mc96->ldo_regulator))

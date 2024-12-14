@@ -271,8 +271,8 @@
 
 	i2c_ir: i2c-gpio-6 {
 		compatible = "i2c-gpio";
-		sda-gpios = <&gpy0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-		scl-gpios = <&gpy0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		sda-gpios = <&gpy0 0 GPIO_ACTIVE_HIGH>;
+		scl-gpios = <&gpy0 1 GPIO_ACTIVE_HIGH>;
 		i2c-gpio,delay-us = <2>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -280,8 +280,11 @@
 		irled: irled@50 {
 			compatible = "abov,mc96fr332a-ir-tx";
 			reg = <0x50>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&irled_status>;
 
 			wake-gpios = <&gpl0 3 GPIO_ACTIVE_HIGH>;
+			status-gpios = <&gpm0 6 GPIO_ACTIVE_HIGH>;
 			ldo-supply = <&ldo19_reg>;
 			vdd-supply = <&irtx_reg>;
 		};
@@ -1092,6 +1095,12 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 		samsung,pin-drv = <EXYNOS4_PIN_DRV_LV1>;
+	};
+
+	irled_status: irled-status-pins {
+		samsung,pins = "gpm0-6";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_UP>;
 	};
 
 	s5m8767_irq: s5m8767-irq-pins {
