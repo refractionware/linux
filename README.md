@@ -22,6 +22,7 @@ Branches containing work-in-progress code for the Samsung Galaxy Tab 3 8.0. For 
 Some of these branches are pushed to https://gitlab.com/knuxify/linux, which is a fork of the [exynos4-mainline/linux](https://gitlab.com/exynos4-mainline/linux) repo - usually for making MRs against said fork.
 
 - `tab3/display-tweaks`: Random work on display tweaks, in an attempt to fix display issues on my second Tab 3. Turns out the driver doesn't write a few values, so that's fixed, and the timing calculations are off for horizontal porch. These are fixed (or worked around) in that branch, but display still breaks sometimes, pending more investigation.
+- `tab3/ir`: Driver for ABOV MC96FR332AUB chip used in the Tab 3 8.0/Note 10.1 for IR transmission. Seems to work (IR light lights up), but my testing has been inconclusive so far (could not get my TV to power on with lirc).
 
 ### Older branches
 
