@@ -31,6 +31,7 @@ struct mc96fr332a_ir_tx {
 	struct regulator *vdd_regulator;
 
 	u32 carrier;
+	bool force_ldo_toggle;
 
 	/* The I2C write buffer used during TX transfers is stored here
 	 * due to stack size limits. */
@@ -106,7 +107,6 @@ static bool mc96fr332a_ir_tx_verify_fw_checksum(struct mc96fr332a_ir_tx *mc96)
 	}
 
 	checksum_a = buf[6] << 8 | buf[7];
-	dev_info(mc96->dev, "checksum %d\n", checksum_a);
 
 	checksum_b = 0;
 	for (i = 0; i < 6; i++)
@@ -115,30 +115,11 @@ static bool mc96fr332a_ir_tx_verify_fw_checksum(struct mc96fr332a_ir_tx *mc96)
 	return (checksum_a == checksum_b);
 }
 
-/* TODO: debug function, remove this */
-/*static void mc96fr332a_ir_tx_print_buffer(struct mc96fr332a_ir_tx *mc96)
-{
-	struct i2c_client *client = mc96->client;
-	int ret;
-	u8 buf[8];
-
-	ret = i2c_smbus_read_i2c_block_data(client, 0x00, 8, buf);
-	if (ret < 0) {
-		dev_err(&client->dev, "Failed to get buffer for printing: %d\n", ret);
-		return;
-	}
-
-	dev_info(mc96->dev, "Current buffer: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
-}*/
-
 /* TODO: move firmware out of the kernel */
 static int mc96fr332a_ir_tx_update_fw(struct mc96fr332a_ir_tx *mc96) {
 	bool checksum_correct;
 	int fw_version, i, len;
 	int ret = 0;
-
-	// mc96fr332a_ir_tx_power_off(mc96);
-	// msleep(20);
 
 	mc96fr332a_ir_tx_power_on(mc96);
 	mc96fr332a_ir_tx_set_wake(mc96, 1);
@@ -147,10 +128,12 @@ static int mc96fr332a_ir_tx_update_fw(struct mc96fr332a_ir_tx *mc96) {
 	fw_version = mc96fr332a_ir_tx_get_fw_version(mc96);
 	if (fw_version == MC96FR332A_IR_TX_FIRMWARE_VERSION) {
 		/* Already on latest firmware, return */
+		dev_info(mc96->dev, "Firmware version: 0x%x\n", fw_version);
 		goto out;
 	}
 
-	dev_info(mc96->dev, "Need to update firmware (current version: %d)\n", fw_version);
+	dev_info(mc96->dev, "Need to update firmware (current version: 0x%x, target version 0x%x)\n",
+		 fw_version, MC96FR332A_IR_TX_FIRMWARE_VERSION);
 
 	mc96fr332a_ir_tx_power_off(mc96);
 	mc96fr332a_ir_tx_set_wake(mc96, 0);
@@ -169,19 +152,15 @@ static int mc96fr332a_ir_tx_update_fw(struct mc96fr332a_ir_tx *mc96) {
 	msleep(30);
 
 	/* Write new firmware */
-
 	for (i = 0; i < MC96FR332A_IR_TX_FIRMWARE_FRAME_COUNT; i++) {
 		if (i == MC96FR332A_IR_TX_FIRMWARE_FRAME_COUNT - 1)
 			len = 6;
 		else
 			len = 70;
 		ret = i2c_master_send(mc96->client, &IRDA_binary[i * 70], len);
-		//ret = i2c_smbus_write_i2c_block_data(mc96->client, 0x00, len, &IRDA_binary[i * 70]);
 		if (ret < 0) {
 			dev_err(mc96->dev, "Failed to write firmware: %d\n", ret);
 			goto out;
-		} else {
-			dev_info(mc96->dev, "Wrote firmware frame %d\n", i);
 		}
 		msleep(30);
 	}
@@ -200,6 +179,8 @@ static int mc96fr332a_ir_tx_update_fw(struct mc96fr332a_ir_tx *mc96) {
 		goto out;
 	}
 
+	dev_info(mc96->dev, "Firmware updated succesfully\n");
+
 out:
 	mc96fr332a_ir_tx_power_off(mc96);
 	mc96fr332a_ir_tx_set_wake(mc96, 0);
@@ -208,40 +189,12 @@ out:
 }
 
 /*
- * remcon_store:
- * - read one unsigned integer from char buffer `buf` and save it into `_data`
- *   - this read is null-terminated, i.e. a value of 0 is a break
- *   - the maximum loop count is 2048 (`MAX_SIZE`)
- *   - it would appear that these integers are 32-bit.
- * - an incrementing count of read integers is stored in `data->count` (henceforth `count`)
- * (first read refers to count = 0. as far as i can tell, this only happens on the first read ever;
- *  after that, the count is always reset to 2. weird bug or what?)
- * - on the first read and all reads past the second read:
- *   - increment `ir_sum` by `_data`
- *   - save 2 bytes into `signal`
- * - on the second read:
- *   - set `ir_freq` to `_data`
- *   - wake up the controller:
- *     - if it's off, turn vdd on, set wake_en on and wait 60ms
- *     - if it's on, turn wake_en off, wait 200us, turn it back on and wait 30ms
- *   - save 3 bytes into `signal`
- * once the read ends, pass off to ir_remocon_work.
+ * The data transferred to the chip follows this format:
  *
- * ir_remocon_work:
- * - the first 2 bytes of `signal` are set to the final count (irda_add_checksum_length)
- * - a checksum is calculated, containing the sum of all signals; it is saved at the end,
- *   right after all the signals (irda_add_checksum_length)
- * - the entirety of `signal` is sent out in one i2c block send
- * - the firmware verifies the checksum; if the irq pin is pulled up after 10ms,
- *   the checksum is assumed to be correct. (we should clear this pin, imo!)
- * - `ir_sum` and `ir_freq` are used to calculate the estimated emission time
- * - after the estimated emission time elapses, if the irq pin is pulled up,
- *   the ir is assumed to be sent correctly.
- *
- * in other words: the data transferred to the chip follows this format:
  * | cc | fff | ss | ss | .. | ss | mm |
- * (c - signal count, f - frequency, s - signal, m - checksum.)
- * (how many times the letters repeat dictates the amount of bytes)
+ *
+ * c - signal count, f - frequency, s - signal, m - checksum.
+ * How many times the letters repeat dictates the amount of bytes.
  */
 
 static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
@@ -251,8 +204,6 @@ static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
 	unsigned int bufsize = (count * 2) + 7; /* 2 + 3 + (count * 2) + 2 */
 	int checksum = 0;
 	int i, ret;
-
-	dev_info(&rc_dev->dev, "received transfer of count %d, freq %d\n", count, mc96->carrier);
 
 	if ((bufsize > 2048)) {
 		dev_err(&rc_dev->dev, "Transfer buffer too large\n");
@@ -282,29 +233,26 @@ static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
 	/* Checksum: last 2 bytes */
 	for (i = 0; i < (bufsize - 2); i++) {
 		checksum += mc96->i2c_buf[i];
-		dev_info(mc96->dev, "%d:%x\n", i, mc96->i2c_buf[i]);
 	}
 
 	mc96->i2c_buf[bufsize - 2] = (checksum >> 8) & 0xFF;
 	mc96->i2c_buf[bufsize - 1] = checksum & 0xFF;
 
-	dev_info(mc96->dev, "%d:%x\n", bufsize-2, mc96->i2c_buf[bufsize-2]);
-	dev_info(mc96->dev, "%d:%x\n", bufsize-1, mc96->i2c_buf[bufsize-1]);
-
 	/* Wake up the transmitter and send the prepared data */
-	mc96fr332a_ir_tx_set_wake(mc96, 0);
-	udelay(200);
-	mc96fr332a_ir_tx_set_wake(mc96, 1);
-	msleep(30);
-
-	//ret = i2c_smbus_write_i2c_block_data(mc96->client, 0x00, bufsize, mc96->i2c_buf);
-	ret = i2c_master_send(mc96->client, mc96->i2c_buf, bufsize);
+	ret = mc96fr332a_ir_tx_power_on(mc96);
 	if (ret < 0) {
-		dev_err(&rc_dev->dev, "Failed to write IR transfer data (%d)\n", ret);
+		dev_err(mc96->dev, "Failed to power on: %d\n", ret);
 		return ret;
 	}
+	mc96fr332a_ir_tx_set_wake(mc96, 1);
+	msleep(60);
 
-	dev_info(&rc_dev->dev, "IR transfer data written\n");
+	ret = i2c_master_send(mc96->client, mc96->i2c_buf, bufsize);
+	if (ret < 0) {
+		dev_err(&rc_dev->dev, "Failed to write IR transfer data (%d)\n",
+			ret);
+		return ret;
+	}
 
 	mdelay(10);
 
@@ -326,18 +274,15 @@ static int mc96fr332a_ir_tx(struct rc_dev *rc_dev, unsigned int *txbuf,
 			return -EINVAL;
 		}
 
-		dev_info(&rc_dev->dev, "Transfer status: %d\n", ret);
-
 		if (ret == 1) {
 			break;
 		}
 		i--;
 	}
 
-	if (ret == 0)
-		dev_err(&rc_dev->dev, "Transfer failed");
-
 	mc96fr332a_ir_tx_set_wake(mc96, 0);
+	mc96fr332a_ir_tx_power_off(mc96);
+	msleep(10);
 
 	return 0;
 }
@@ -353,35 +298,6 @@ static int mc96fr332a_ir_tx_set_carrier(struct rc_dev *rc_dev, u32 carrier)
 	mc96->carrier = carrier;
 
 	return 0;
-}
-
-static int mc96fr332a_ir_tx_open(struct rc_dev *rc_dev)
-{
-	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
-	int ret;
-
-	mc96fr332a_ir_tx_set_wake(mc96, 1);
-	ret = mc96fr332a_ir_tx_power_on(mc96);
-	if (ret < 0) {
-		dev_err(mc96->dev, "Failed to power on: %d\n", ret);
-		return ret;
-	}
-
-	msleep(30);
-
-	dev_info(mc96->dev, "opened device\n");
-
-	return 0;
-}
-
-static void mc96fr332a_ir_tx_close(struct rc_dev *rc_dev)
-{
-	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
-
-	mc96fr332a_ir_tx_power_off(mc96);
-	msleep(10);
-
-	dev_info(mc96->dev, "closed device\n");
 }
 
 static int mc96fr332a_ir_tx_probe(struct i2c_client *client)
@@ -430,8 +346,6 @@ static int mc96fr332a_ir_tx_probe(struct i2c_client *client)
 	rcdev->device_name = DEVICE_NAME;
 	rcdev->tx_ir = mc96fr332a_ir_tx;
 	rcdev->s_tx_carrier = mc96fr332a_ir_tx_set_carrier;
-	rcdev->open = mc96fr332a_ir_tx_open;
-	rcdev->close = mc96fr332a_ir_tx_close;
 
 	mc96->carrier = 38000;
 
