@@ -378,7 +378,7 @@ static void mc96fr332a_ir_tx_close(struct rc_dev *rc_dev)
 {
 	struct mc96fr332a_ir_tx *mc96 = rc_dev->priv;
 
-	//mc96fr332a_ir_tx_power_off(mc96);
+	mc96fr332a_ir_tx_power_off(mc96);
 	msleep(10);
 
 	dev_info(mc96->dev, "closed device\n");

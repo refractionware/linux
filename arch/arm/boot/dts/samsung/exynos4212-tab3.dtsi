@@ -271,8 +271,8 @@
 
 	i2c_ir: i2c-gpio-6 {
 		compatible = "i2c-gpio";
-		sda-gpios = <&gpy0 0 GPIO_ACTIVE_HIGH>;
-		scl-gpios = <&gpy0 1 GPIO_ACTIVE_HIGH>;
+		sda-gpios = <&gpy0 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&gpy0 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
 		i2c-gpio,delay-us = <2>;
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -344,9 +344,8 @@
 		regulator-name = "IRDA_1.9V";
 		regulator-min-microvolt = <1900000>;
 		regulator-max-microvolt = <1900000>;
-		gpio = <&gpj0 3 GPIO_ACTIVE_HIGH>; /* eMMC_EN */
+		gpio = <&gpj0 3 GPIO_ACTIVE_HIGH>; /* IR_LED_EN  */
 		enable-active-high;
-		regulator-always-on;
 	};
 
 	battery: battery {
@@ -759,7 +758,6 @@
 				regulator-min-microvolt = <1900000>;
 				regulator-max-microvolt = <1900000>;
 				op_mode = <1>;
-				regulator-always-on;
 			};
 
 			ldo20_reg: LDO20 {
