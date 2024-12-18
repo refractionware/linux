@@ -677,7 +677,11 @@ int fimc_is_hw_initialize(struct fimc_is *is)
 	pr_debug("setfile.base: %#x\n", is->setfile.base);
 
 	/* Load the setfile. */
-	fimc_is_load_setfile(is, FIMC_IS_SETFILE_6A3);
+	ret = fimc_is_load_setfile(is, FIMC_IS_SETFILE_6A3);
+	if (ret < 0) {
+		dev_err(dev, "loading setfile from system failed\n");
+		return ret;
+	}
 	clear_bit(IS_ST_SETFILE_LOADED, &is->state);
 	fimc_is_hw_load_setfile(is);
 	ret = fimc_is_wait_event(is, IS_ST_SETFILE_LOADED, 1,
