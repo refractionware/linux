@@ -667,6 +667,7 @@ static void fimc_capture_try_selection(struct fimc_ctx *ctx,
 		min_sz = var->min_out_pixsize;
 	} else {
 		u32 depth = fimc_get_format_depth(sink->fmt);
+		dev_info(fimc->v4l2_dev->dev, "detected depth: %d\n", depth);
 		align_sz = 64/ALIGN(depth, 8);
 		min_sz = var->min_inp_pixsize;
 		min_w = min_h = min_sz;
@@ -687,8 +688,13 @@ static void fimc_capture_try_selection(struct fimc_ctx *ctx,
 	max_h = min_t(u32, FIMC_CAMIF_MAX_HEIGHT, sink->f_height);
 
 	if (target == V4L2_SEL_TGT_COMPOSE) {
-		min_w = min_t(u32, max_w, sink->f_width / max_sc_h);
-		min_h = min_t(u32, max_h, sink->f_height / max_sc_v);
+		dev_info(fimc->v4l2_dev->dev, "max_sc_(h/v): %d %d\n", max_sc_h, max_sc_v);
+		max_sc_h = 1;
+		max_sc_v = 1;
+		min_w = 640;
+		min_h = 480;
+		//min_w = min_t(u32, max_w, sink->f_width / max_sc_h);
+		//min_h = min_t(u32, max_h, sink->f_height / max_sc_v);
 		if (rotate) {
 			swap(max_sc_h, max_sc_v);
 			swap(min_w, min_h);
@@ -1521,8 +1527,12 @@ static int fimc_subdev_set_fmt(struct v4l2_subdev *sd,
 	struct fimc_frame *ff;
 	const struct fimc_fmt *ffmt;
 
-	dbg("pad%d: code: 0x%x, %dx%d",
+	dev_info(sd->dev, "pad%d: code: 0x%x, %dx%d",
 	    fmt->pad, mf->code, mf->width, mf->height);
+	if (mf->width == 0)
+		mf->width = 640;
+	if (mf->height == 0)
+		mf->height = 640;
 
 	if (fmt->pad == FIMC_SD_PAD_SOURCE && vb2_is_busy(&vc->vbq))
 		return -EBUSY;
