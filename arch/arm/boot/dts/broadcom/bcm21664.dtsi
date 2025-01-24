@@ -60,6 +60,11 @@
 	compatible = "brcm,bcm21664-i2c", "brcm,kona-i2c";
 };
 
+&hub_timer {
+	brcm,local-timer;
+	brcm,local-timer-channel-offset = <2>;
+};
+
 &gpio {
 	compatible = "brcm,bcm21664-gpio", "brcm,kona-gpio";
 };

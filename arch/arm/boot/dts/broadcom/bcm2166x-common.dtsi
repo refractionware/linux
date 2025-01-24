@@ -54,6 +54,7 @@
 						<GIC_SPI 51 IRQ_TYPE_LEVEL_HIGH>,
 						<GIC_SPI 50 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&aon_ccu BCM21664_AON_CCU_HUB_TIMER>;
+			brcm,gp-timer;
 		};
 
 		pmu_bsc: i2c@100d000 {
