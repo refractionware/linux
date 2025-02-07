@@ -10,9 +10,16 @@ This README contains a general explaination of each of the branches within.
 
 Patches as they are submitted to the mailing list; contain the most up-to-date and WIP versions of patches.
 
+### Broadcom Kona
+
+* `b4/bcm59054`: BCM59054 support + regulator driver fixes.
+* `b4/bcm21664-pinctrl`: BCM21664 pinctrl support.
+* `b4/kona-gpio-fixes`: Fixes for GPIO bugs on Broadcom Kona.
+
+### Samsung Exynos 4
+
 * `b4/max77693-charger-extcon`: MAX77693 charger extcon + OTG support patches. https://lists.sr.ht/~postmarketos/upstreaming/patches/53020
 * `b4/exynos-phy-extcon`: patch for extcon-based USB mode switch toggling, not sent yet and likely won't be pending a better way to do this
-* `b4/bcm59054`: BCM59054 support + regulator driver fixes. Yet to be sent.
 * `b4/max17042-soc-threshold-fix`: Fix SOC threshold calculation on MAX17042. Yet to be sent.
 
 ## tab3/*
