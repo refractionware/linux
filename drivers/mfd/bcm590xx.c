@@ -48,6 +48,72 @@ static const struct regmap_config bcm590xx_regmap_config_sec = {
 	.cache_type	= REGCACHE_MAPLE,
 };
 
+/* Map device_type enum value to model name string */
+static const char * const bcm590xx_names[BCM590XX_TYPE_MAX] = {
+	[BCM59054_TYPE] = "BCM59054",
+	[BCM59056_TYPE] = "BCM59056",
+};
+
+/*
+ * Parse the version from version registers and make sure it matches
+ * the device type passed to the compatible.
+ */
+static int bcm590xx_parse_version(struct bcm590xx *bcm590xx)
+{
+	unsigned int id, rev;
+	int ret;
+
+	/* Get PMU ID and verify that it matches compatible */
+	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_PMUID, &id);
+	if (ret) {
+		dev_err(bcm590xx->dev, "failed to read PMU ID: %d\n", ret);
+		return ret;
+	}
+
+	switch (bcm590xx->dev_type) {
+	case BCM59054_TYPE:
+		if (id != BCM590XX_PMUID_BCM59054) {
+			dev_err(bcm590xx->dev,
+				"Incorrect ID for BCM59054: expected %x, got %x. Check your DT compatible.\n",
+				BCM590XX_PMUID_BCM59054, id);
+			return -EINVAL;
+		}
+		break;
+	case BCM59056_TYPE:
+		if (id != BCM590XX_PMUID_BCM59056) {
+			dev_err(bcm590xx->dev,
+				"Incorrect ID for BCM59056: expected %x, got %x. Check your DT compatible.\n",
+				BCM590XX_PMUID_BCM59056, id);
+			return -EINVAL;
+		}
+		break;
+	default:
+		dev_err(bcm590xx->dev,
+			"Invalid device type; this is a driver bug!\n");
+		return -EINVAL;
+	}
+
+	/* Get PMU revision and store it in the info struct */
+	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_PMUREV, &rev);
+	if (ret) {
+		dev_err(bcm590xx->dev, "failed to read PMU revision: %d\n",
+			ret);
+		return ret;
+	}
+
+	bcm590xx->rev_dig = (rev >> BCM590XX_PMUREV_DIG_SHIFT)
+	& BCM590XX_PMUREV_DIG_MASK;
+
+	bcm590xx->rev_ana = (rev >> BCM590XX_PMUREV_ANA_SHIFT)
+	& BCM590XX_PMUREV_ANA_MASK;
+
+	dev_info(bcm590xx->dev, "PMU ID 0x%x (%s), revision: dig %d ana %d",
+		 id, bcm590xx_names[bcm590xx->dev_type],
+		 bcm590xx->rev_dig, bcm590xx->rev_ana);
+
+	return 0;
+}
+
 static int bcm590xx_i2c_probe(struct i2c_client *i2c_pri)
 {
 	struct bcm590xx *bcm590xx;
@@ -64,7 +130,7 @@ static int bcm590xx_i2c_probe(struct i2c_client *i2c_pri)
 	bcm590xx->dev_type = (uintptr_t) of_device_get_match_data(bcm590xx->dev);
 
 	bcm590xx->regmap_pri = devm_regmap_init_i2c(i2c_pri,
-						 &bcm590xx_regmap_config_pri);
+						    &bcm590xx_regmap_config_pri);
 	if (IS_ERR(bcm590xx->regmap_pri)) {
 		ret = PTR_ERR(bcm590xx->regmap_pri);
 		dev_err(&i2c_pri->dev, "primary regmap init failed: %d\n", ret);
@@ -73,7 +139,7 @@ static int bcm590xx_i2c_probe(struct i2c_client *i2c_pri)
 
 	/* Secondary I2C slave address is the base address with A(2) asserted */
 	bcm590xx->i2c_sec = i2c_new_dummy_device(i2c_pri->adapter,
-					  i2c_pri->addr | BIT(2));
+						 i2c_pri->addr | BIT(2));
 	if (IS_ERR(bcm590xx->i2c_sec)) {
 		dev_err(&i2c_pri->dev, "failed to add secondary I2C device\n");
 		return PTR_ERR(bcm590xx->i2c_sec);
@@ -81,13 +147,17 @@ static int bcm590xx_i2c_probe(struct i2c_client *i2c_pri)
 	i2c_set_clientdata(bcm590xx->i2c_sec, bcm590xx);
 
 	bcm590xx->regmap_sec = devm_regmap_init_i2c(bcm590xx->i2c_sec,
-						&bcm590xx_regmap_config_sec);
+						    &bcm590xx_regmap_config_sec);
 	if (IS_ERR(bcm590xx->regmap_sec)) {
 		ret = PTR_ERR(bcm590xx->regmap_sec);
 		dev_err(&bcm590xx->i2c_sec->dev,
 			"secondary regmap init failed: %d\n", ret);
 		goto err;
 	}
+
+	ret = bcm590xx_parse_version(bcm590xx);
+	if (ret)
+		goto err;
 
 	ret = devm_mfd_add_devices(&i2c_pri->dev, -1, bcm590xx_devs,
 				   ARRAY_SIZE(bcm590xx_devs), NULL, 0, NULL);
@@ -118,8 +188,8 @@ MODULE_DEVICE_TABLE(i2c, bcm590xx_i2c_id);
 
 static struct i2c_driver bcm590xx_i2c_driver = {
 	.driver = {
-		   .name = "bcm590xx",
-		   .of_match_table = bcm590xx_of_match,
+		.name = "bcm590xx",
+		.of_match_table = bcm590xx_of_match,
 	},
 	.probe = bcm590xx_i2c_probe,
 	.id_table = bcm590xx_i2c_id,
