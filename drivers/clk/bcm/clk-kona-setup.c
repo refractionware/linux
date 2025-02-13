@@ -66,6 +66,56 @@ static bool clk_requires_trigger(struct kona_clk *bcm_clk)
 	return divider_exists(div) && !divider_is_fixed(div);
 }
 
+static bool bus_clk_data_offsets_valid(struct kona_clk *bcm_clk)
+{
+	struct bus_clk_data *bus;
+	struct bcm_clk_policy *policy;
+	struct bcm_clk_gate *gate;
+	struct bcm_clk_hyst *hyst;
+	const char *name;
+	u32 limit;
+
+	BUG_ON(bcm_clk->type != bcm_clk_bus);
+	bus = bcm_clk->u.bus;
+	name = bcm_clk->init_data.name;
+
+	limit = bcm_clk->ccu->range - sizeof(u32);
+	limit = round_down(limit, sizeof(u32));
+
+	policy = &bus->policy;
+	if (policy_exists(policy)) {
+		if (policy->offset > limit) {
+			pr_err("%s: bad policy offset for %s (%u > %u)\n",
+				__func__, name, policy->offset, limit);
+			return false;
+		}
+	}
+
+	gate = &bus->gate;
+	hyst = &bus->hyst;
+	if (gate_exists(gate)) {
+		if (gate->offset > limit) {
+			pr_err("%s: bad gate offset for %s (%u > %u)\n",
+				__func__, name, gate->offset, limit);
+			return false;
+		}
+		if (hyst_exists(hyst)) {
+			if (hyst->offset > limit) {
+				pr_err("%s: bad hysteresis offset for %s "
+					"(%u > %u)\n", __func__,
+					name, hyst->offset, limit);
+				return false;
+			}
+		}
+	} else if (hyst_exists(hyst)) {
+		pr_err("%s: hysteresis but no gate for %s\n", __func__, name);
+		return false;
+	}
+
+
+	return true;
+}
+
 static bool peri_clk_data_offsets_valid(struct kona_clk *bcm_clk)
 {
 	struct peri_clk_data *peri;
@@ -76,15 +126,13 @@ static bool peri_clk_data_offsets_valid(struct kona_clk *bcm_clk)
 	struct bcm_clk_sel *sel;
 	struct bcm_clk_trig *trig;
 	const char *name;
-	u32 range;
 	u32 limit;
 
 	BUG_ON(bcm_clk->type != bcm_clk_peri);
 	peri = bcm_clk->u.peri;
 	name = bcm_clk->init_data.name;
-	range = bcm_clk->ccu->range;
 
-	limit = range - sizeof(u32);
+	limit = bcm_clk->ccu->range - sizeof(u32);
 	limit = round_down(limit, sizeof(u32));
 
 	policy = &peri->policy;
@@ -162,58 +210,6 @@ static bool peri_clk_data_offsets_valid(struct kona_clk *bcm_clk)
 				__func__, name, trig->offset, limit);
 			return false;
 		}
-	}
-
-	return true;
-}
-
-static bool bus_clk_data_offsets_valid(struct kona_clk *bcm_clk)
-{
-	struct bus_clk_data *bus;
-	struct bcm_clk_policy *policy;
-	struct bcm_clk_gate *gate;
-	struct bcm_clk_hyst *hyst;
-	const char *name;
-	u32 range;
-	u32 limit;
-
-	BUG_ON(bcm_clk->type != bcm_clk_bus);
-	bus = bcm_clk->u.bus;
-	name = bcm_clk->init_data.name;
-	range = bcm_clk->ccu->range;
-
-	limit = range - sizeof(u32);
-	limit = round_down(limit, sizeof(u32));
-
-	policy = &bus->policy;
-	if (policy_exists(policy)) {
-		if (policy->offset > limit) {
-			pr_err("%s: bad policy offset for %s (%u > %u)\n",
-				__func__, name, policy->offset, limit);
-			return false;
-		}
-	}
-
-	gate = &bus->gate;
-	hyst = &bus->hyst;
-	if (gate_exists(gate)) {
-		if (gate->offset > limit) {
-			pr_err("%s: bad gate offset for %s (%u > %u)\n",
-				__func__, name, gate->offset, limit);
-			return false;
-		}
-
-		if (hyst_exists(hyst)) {
-			if (hyst->offset > limit) {
-				pr_err("%s: bad hysteresis offset for %s "
-					"(%u > %u)\n", __func__,
-					name, hyst->offset, limit);
-				return false;
-			}
-		}
-	} else if (hyst_exists(hyst)) {
-		pr_err("%s: hysteresis but no gate for %s\n", __func__, name);
-		return false;
 	}
 
 	return true;
@@ -439,6 +435,23 @@ static bool trig_valid(struct bcm_clk_trig *trig, const char *field_name,
 	return bit_posn_valid(trig->bit, field_name, clock_name);
 }
 
+/* Determine whether the set of bus clock registers are valid. */
+static bool
+bus_clk_data_valid(struct kona_clk *bcm_clk)
+{
+	struct bcm_clk_gate *gate;
+
+	BUG_ON(bcm_clk->type != bcm_clk_bus);
+	if (!bus_clk_data_offsets_valid(bcm_clk))
+		return false;
+
+	gate = &bcm_clk->u.bus->gate;
+	if (!gate_exists(gate))
+		return true;
+
+	return gate_valid(gate, "gate", bcm_clk->init_data.name);
+}
+
 /* Determine whether the set of peripheral clock registers are valid. */
 static bool
 peri_clk_data_valid(struct kona_clk *bcm_clk)
@@ -533,48 +546,15 @@ peri_clk_data_valid(struct kona_clk *bcm_clk)
 	return kona_dividers_valid(bcm_clk);
 }
 
-/* Determine whether the set of bus clock registers are valid. */
-static bool
-bus_clk_data_valid(struct kona_clk *bcm_clk)
-{
-	struct bus_clk_data *bus;
-	struct bcm_clk_policy *policy;
-	struct bcm_clk_gate *gate;
-	struct bcm_clk_hyst *hyst;
-	const char *name;
-
-	BUG_ON(bcm_clk->type != bcm_clk_bus);
-
-	if (!bus_clk_data_offsets_valid(bcm_clk))
-		return false;
-
-	bus = bcm_clk->u.bus;
-	name = bcm_clk->init_data.name;
-
-	policy = &bus->policy;
-	if (policy_exists(policy) && !policy_valid(policy, name))
-		return false;
-
-	gate = &bus->gate;
-	if (gate_exists(gate) && !gate_valid(gate, "gate", name))
-		return false;
-
-	hyst = &bus->hyst;
-	if (hyst_exists(hyst) && !hyst_valid(hyst, name))
-		return false;
-
-	return true;
-}
-
 static bool kona_clk_valid(struct kona_clk *bcm_clk)
 {
 	switch (bcm_clk->type) {
-	case bcm_clk_peri:
-		if (!peri_clk_data_valid(bcm_clk))
-			return false;
-		break;
 	case bcm_clk_bus:
 		if (!bus_clk_data_valid(bcm_clk))
+			return false;
+		break;
+	case bcm_clk_peri:
+		if (!peri_clk_data_valid(bcm_clk))
 			return false;
 		break;
 	default:
@@ -739,18 +719,24 @@ static void clk_sel_teardown(struct bcm_clk_sel *sel,
 	init_data->parent_names = NULL;
 }
 
+static void bus_clk_teardown(struct bus_clk_data *data,
+				struct clk_init_data *init_data)
+{
+	/* Nothing to do */
+}
+
+static int
+bus_clk_setup(struct bus_clk_data *data, struct clk_init_data *init_data)
+{
+	init_data->flags = CLK_IGNORE_UNUSED;
+
+	return 0;
+}
+
 static void peri_clk_teardown(struct peri_clk_data *data,
 				struct clk_init_data *init_data)
 {
 	clk_sel_teardown(&data->sel, init_data);
-}
-
-static void bus_clk_teardown(struct bus_clk_data *data,
-				struct clk_init_data *init_data)
-{
-	init_data->num_parents = 0;
-	kfree(init_data->parent_names);
-	init_data->parent_names = NULL;
 }
 
 /*
@@ -767,25 +753,14 @@ peri_clk_setup(struct peri_clk_data *data, struct clk_init_data *init_data)
 	return clk_sel_setup(data->clocks, &data->sel, init_data);
 }
 
-static int
-bus_clk_setup(struct bus_clk_data *data, struct clk_init_data *init_data)
-{
-	init_data->flags = CLK_IGNORE_UNUSED;
-
-	init_data->parent_names = NULL;
-	init_data->num_parents = 0;
-
-	return 0;
-}
-
 static void bcm_clk_teardown(struct kona_clk *bcm_clk)
 {
 	switch (bcm_clk->type) {
-	case bcm_clk_peri:
-		peri_clk_teardown(bcm_clk->u.data, &bcm_clk->init_data);
-		break;
 	case bcm_clk_bus:
 		bus_clk_teardown(bcm_clk->u.data, &bcm_clk->init_data);
+		break;
+	case bcm_clk_peri:
+		peri_clk_teardown(bcm_clk->u.data, &bcm_clk->init_data);
 		break;
 	default:
 		break;
@@ -813,13 +788,13 @@ static int kona_clk_setup(struct kona_clk *bcm_clk)
 	struct clk_init_data *init_data = &bcm_clk->init_data;
 
 	switch (bcm_clk->type) {
-	case bcm_clk_peri:
-		ret = peri_clk_setup(bcm_clk->u.data, init_data);
+	case bcm_clk_bus:
+		ret = bus_clk_setup(bcm_clk->u.data, init_data);
 		if (ret)
 			return ret;
 		break;
-	case bcm_clk_bus:
-		ret = bus_clk_setup(bcm_clk->u.data, init_data);
+	case bcm_clk_peri:
+		ret = peri_clk_setup(bcm_clk->u.data, init_data);
 		if (ret)
 			return ret;
 		break;
@@ -960,9 +935,6 @@ void __init kona_dt_ccu_setup(struct ccu_data *ccu,
 				node, ret);
 		goto out_err;
 	}
-
-	if (!kona_ccu_init(ccu))
-		pr_err("Broadcom %pOFn initialization had errors\n", node);
 
 	return;
 out_err:

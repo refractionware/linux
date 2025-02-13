@@ -379,6 +379,12 @@ struct bcm_clk_trig {
 		.flags = FLAG(TRIG, EXISTS),				\
 	}
 
+struct bus_clk_data {
+	struct bcm_clk_policy policy;
+	struct bcm_clk_gate gate;
+	struct bcm_clk_hyst hyst;
+};
+
 struct peri_clk_data {
 	struct bcm_clk_policy policy;
 	struct bcm_clk_gate gate;
@@ -390,14 +396,6 @@ struct peri_clk_data {
 	struct bcm_clk_sel sel;
 	const char *clocks[];	/* must be last; use CLOCKS() to declare */
 };
-
-struct bus_clk_data {
-	struct bcm_clk_policy policy;
-	struct bcm_clk_gate gate;
-	struct bcm_clk_hyst hyst;
-	const char *clocks[];	/* must be last; use CLOCKS() to declare */
-};
-
 #define CLOCKS(...)	{ __VA_ARGS__, NULL, }
 #define NO_CLOCKS	{ NULL, }	/* Must use of no parent clocks */
 
@@ -406,26 +404,47 @@ struct kona_clk {
 	struct clk_init_data init_data;	/* includes name of this clock */
 	struct ccu_data *ccu;	/* ccu this clock is associated with */
 	enum bcm_clk_type type;
+	u32 flags;		/* BCM_CLK_KONA_FLAGS_* below */
+	struct {
+		const char *name;
+		struct clk *clk;
+	} prereq;
 	union {
 		void *data;
-		struct peri_clk_data *peri;
 		struct bus_clk_data *bus;
+		struct peri_clk_data *peri;
 	} u;
 };
 #define to_kona_clk(_hw) \
 	container_of(_hw, struct kona_clk, hw)
 
+/*
+ * Kona clock flags:
+ *   INITIALIZED	clock has been initialized already
+ */
+#define BCM_CLK_KONA_FLAGS_INITIALIZED	((u32)1 << 0)	/* Clock initialized */
+
 /* Initialization macro for an entry in a CCU's kona_clks[] array. */
-#define KONA_CLK(_ccu_name, _clk_name, _type)				\
-	{								\
+#define ___KONA_CLK_COMMON(_ccu_name, _clk_name, _type)			\
 		.init_data	= {					\
 			.name = #_clk_name,				\
 			.ops = &kona_ ## _type ## _clk_ops,		\
 		},							\
 		.ccu		= &_ccu_name ## _ccu_data,		\
 		.type		= bcm_clk_ ## _type,			\
-		.u.data		= &_clk_name ## _data,			\
+		.u.data		= &_clk_name ## _data
+
+#define KONA_CLK_PREREQ(_ccu_name, _clk_name, _type, _prereq)		\
+	{								\
+		.prereq.name	= #_prereq,				\
+		___KONA_CLK_COMMON(_ccu_name, _clk_name, _type),	\
 	}
+
+#define KONA_CLK(_ccu_name, _clk_name, _type)				\
+	{								\
+		___KONA_CLK_COMMON(_ccu_name, _clk_name, _type),	\
+	}
+
 #define LAST_KONA_CLK	{ .type = bcm_clk_none }
 
 /*
@@ -496,8 +515,8 @@ struct ccu_data {
 
 /* Exported globals */
 
-extern struct clk_ops kona_peri_clk_ops;
 extern struct clk_ops kona_bus_clk_ops;
+extern struct clk_ops kona_peri_clk_ops;
 
 /* Externally visible functions */
 
@@ -507,6 +526,5 @@ extern u64 scaled_div_build(struct bcm_clk_div *div, u32 div_value,
 
 extern void __init kona_dt_ccu_setup(struct ccu_data *ccu,
 				struct device_node *node);
-extern bool __init kona_ccu_init(struct ccu_data *ccu);
 
 #endif /* _CLK_KONA_H */

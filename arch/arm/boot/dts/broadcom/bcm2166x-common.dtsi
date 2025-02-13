@@ -325,31 +325,27 @@
 			compatible = "brcm,bcm21664-slave-ccu";
 			reg = <0x3e011000 0x0f00>;
 			#clock-cells = <1>;
-			clock-output-names = "uartb_apb",
-					     "uartb2_apb",
-					     "uartb3_apb",
-					     "uartb",
+			clock-output-names = "uartb",
 					     "uartb2",
 					     "uartb3",
-					     "bsc1_apb",
-					     "bsc2_apb",
-					     "bsc3_apb",
-					     "bsc4_apb",
 					     "bsc1",
 					     "bsc2",
 					     "bsc3",
-					     "bsc4";
+					     "bsc4",
+					     "uartb_apb",
+					     "uartb2_apb",
+					     "uartb3_apb",
+					     "bsc1_apb",
+					     "bsc2_apb",
+					     "bsc3_apb",
+					     "bsc4_apb";
 		};
 
 		master_ccu: master_ccu@3f001000 {
 			compatible = "brcm,bcm21664-master-ccu";
 			reg = <0x3f001000 0x0f00>;
 			#clock-cells = <1>;
-			clock-output-names = "sdio1_ahb",
-					     "sdio2_ahb",
-					     "sdio3_ahb",
-					     "sdio4_ahb",
-			             "sdio1",
+			clock-output-names = "sdio1",
 					     "sdio2",
 					     "sdio3",
 					     "sdio4",
@@ -357,11 +353,10 @@
 					     "sdio2_sleep",
 					     "sdio3_sleep",
 					     "sdio4_sleep",
-					     "usb_ic_ahb",
-					     "usb_ic",
-					     "usbh_ahb",
-					     "usbh_48m",
-					     "usbh_12m",
+					     "sdio1_ahb",
+					     "sdio2_ahb",
+					     "sdio3_ahb",
+					     "sdio4_ahb",
 					     "usb_otg_ahb";
 		};
 	};
