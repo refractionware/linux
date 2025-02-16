@@ -18,11 +18,11 @@
 #include <linux/slab.h>
 
 /* Under primary I2C address: */
-#define BCM590XX_PMUID			0x1e
+#define BCM590XX_REG_PMUID		0x1e
 #define BCM590XX_PMUID_BCM59054		0x54
 #define BCM590XX_PMUID_BCM59056		0x56
 
-#define BCM590XX_PMUREV			0x1f
+#define BCM590XX_REG_PMUREV		0x1f
 #define BCM590XX_PMUREV_DIG_MASK	0xF
 #define BCM590XX_PMUREV_DIG_SHIFT	0
 #define BCM590XX_PMUREV_ANA_MASK	0xF0
@@ -64,7 +64,7 @@ static int bcm590xx_parse_version(struct bcm590xx *bcm590xx)
 	int ret;
 
 	/* Get PMU ID and verify that it matches compatible */
-	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_PMUID, &id);
+	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_REG_PMUID, &id);
 	if (ret) {
 		dev_err(bcm590xx->dev, "failed to read PMU ID: %d\n", ret);
 		return ret;
@@ -94,7 +94,7 @@ static int bcm590xx_parse_version(struct bcm590xx *bcm590xx)
 	}
 
 	/* Get PMU revision and store it in the info struct */
-	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_PMUREV, &rev);
+	ret = regmap_read(bcm590xx->regmap_pri, BCM590XX_REG_PMUREV, &rev);
 	if (ret) {
 		dev_err(bcm590xx->dev, "failed to read PMU revision: %d\n",
 			ret);
