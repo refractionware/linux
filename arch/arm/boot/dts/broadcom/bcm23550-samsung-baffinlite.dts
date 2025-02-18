@@ -229,6 +229,13 @@
 		interrupt-parent = <&gpio>;
 		interrupts = <29 IRQ_TYPE_EDGE_FALLING>;
 
+		ponkey {
+			compatible = "brcm,bcm59054-ponkey";
+
+			press-debounce-interval-ns = <100000000>;
+			release-debounce-interval-ns = <100000000>;
+		};
+
 		regulators {
 			rfldo_reg: rfldo {
 				regulator-min-microvolt = <1300000>;
