@@ -37,7 +37,11 @@ static const struct mfd_cell bcm59054_devs[] = {
 	{
 		.name = "bcm590xx-ponkey",
 		.of_compatible = "brcm,bcm59054-ponkey",
-	}
+	},
+	{
+		.name = "bcm59054-rtc",
+		.of_compatible = "brcm,bcm59054-rtc",
+	},
 };
 
 static const struct mfd_cell bcm59056_devs[] = {
@@ -46,7 +50,11 @@ static const struct mfd_cell bcm59056_devs[] = {
 	{
 		.name = "bcm590xx-ponkey",
 		.of_compatible = "brcm,bcm59056-ponkey",
-	}
+	},
+	{
+		.name = "bcm59056-rtc",
+		.of_compatible = "brcm,bcm59056-rtc",
+	},
 };
 
 
@@ -72,7 +80,7 @@ static const struct regmap_config bcm590xx_regmap_config_sec = {
 	.reg_bits	= 8,
 	.val_bits	= 8,
 	.max_register	= BCM590XX_MAX_REGISTER_SEC,
-	.cache_type	= REGCACHE_MAPLE,
+	.cache_type	= REGCACHE_NONE,
 };
 
 /** Interrupt handling **/
