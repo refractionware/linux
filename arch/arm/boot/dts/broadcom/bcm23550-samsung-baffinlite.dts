@@ -236,6 +236,10 @@
 			release-debounce-interval-ns = <100000000>;
 		};
 
+		rtc {
+			compatible = "brcm,bcm59054-rtc";
+		};
+
 		regulators {
 			rfldo_reg: rfldo {
 				regulator-min-microvolt = <1300000>;
