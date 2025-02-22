@@ -83,6 +83,28 @@ static struct ccu_data aon_ccu_data = {
 	},
 };
 
+/* Hub CCU */
+
+static struct peri_clk_data mdiomaster_data = {
+        .policy         = POLICY(0x0010, 22), /* 0x14? */
+        .clocks		= CLOCKS("ref_crystal"),
+        .gate           = HW_SW_GATE(0x030c, 16, 1, 0),
+        .hyst           = HYST(0x030c, 8, 9),
+};
+
+static struct ccu_data hub_ccu_data = {
+	BCM21664_CCU_COMMON(hub, HUB),
+	.policy		= {
+		.enable		= CCU_LVM_EN(0x0034, 0),
+		.control	= CCU_POLICY_CTL(0x000c, 0, 1, 2),
+	},
+	.kona_clks	= {
+		[BCM21664_HUB_CCU_MDIOMASTER] =
+			KONA_CLK(hub, mdiomaster, peri),
+		[BCM21664_HUB_CCU_CLOCK_COUNT] = LAST_KONA_CLK,
+	},
+};
+
 /* Master CCU */
 
 static struct peri_clk_data sdio1_data = {
@@ -396,6 +418,11 @@ static void __init kona_dt_aon_ccu_setup(struct device_node *node)
 	kona_dt_ccu_setup(&aon_ccu_data, node);
 }
 
+static void __init kona_dt_hub_ccu_setup(struct device_node *node)
+{
+	kona_dt_ccu_setup(&hub_ccu_data, node);
+}
+
 static void __init kona_dt_master_ccu_setup(struct device_node *node)
 {
 	kona_dt_ccu_setup(&master_ccu_data, node);
@@ -410,6 +437,8 @@ CLK_OF_DECLARE(bcm21664_root_ccu, BCM21664_DT_ROOT_CCU_COMPAT,
 			kona_dt_root_ccu_setup);
 CLK_OF_DECLARE(bcm21664_aon_ccu, BCM21664_DT_AON_CCU_COMPAT,
 			kona_dt_aon_ccu_setup);
+CLK_OF_DECLARE(bcm21664_hub_ccu, BCM21664_DT_HUB_CCU_COMPAT,
+			kona_dt_hub_ccu_setup);
 CLK_OF_DECLARE(bcm21664_master_ccu, BCM21664_DT_MASTER_CCU_COMPAT,
 			kona_dt_master_ccu_setup);
 CLK_OF_DECLARE(bcm21664_slave_ccu, BCM21664_DT_SLAVE_CCU_COMPAT,

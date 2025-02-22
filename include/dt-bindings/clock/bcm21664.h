@@ -15,6 +15,7 @@
 /* bcm21664 CCU device tree "compatible" strings */
 #define BCM21664_DT_ROOT_CCU_COMPAT	"brcm,bcm21664-root-ccu"
 #define BCM21664_DT_AON_CCU_COMPAT	"brcm,bcm21664-aon-ccu"
+#define BCM21664_DT_HUB_CCU_COMPAT	"brcm,bcm21664-hub-ccu"
 #define BCM21664_DT_MASTER_CCU_COMPAT	"brcm,bcm21664-master-ccu"
 #define BCM21664_DT_SLAVE_CCU_COMPAT	"brcm,bcm21664-slave-ccu"
 
@@ -30,6 +31,10 @@
 #define BCM21664_AON_CCU_PMU_BSC		2
 #define BCM21664_AON_CCU_PMU_BSC_APB		3
 #define BCM21664_AON_CCU_CLOCK_COUNT		4
+
+/* hub CCU clock ids */
+#define BCM21664_HUB_CCU_MDIOMASTER		0
+#define BCM21664_HUB_CCU_CLOCK_COUNT		1
 
 /* master CCU clock ids */
 
