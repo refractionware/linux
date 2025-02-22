@@ -146,6 +146,7 @@
 &usbotg {
 	vusb_d-supply = <&usbldo_reg>;
 	vusb_a-supply = <&iosr1_reg>;
+	vbus-supply = <&vbus_reg>;
 	status = "okay";
 };
 
@@ -388,6 +389,12 @@
 			iosr2_reg: iosr2 {
 				regulator-min-microvolt = <860000>;
 				regulator-max-microvolt = <1800000>;
+			};
+
+			vbus_reg: vbus {
+				regulator-min-microvolt = <5000000>;
+				regulator-max-microvolt = <5000000>;
+				/*regulator-always-on;*/ /* temp until driver is fixed */
 			};
 		};
 	};

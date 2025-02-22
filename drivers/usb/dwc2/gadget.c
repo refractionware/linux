@@ -4672,7 +4672,7 @@ static int dwc2_hsotg_pullup(struct usb_gadget *gadget, int is_on)
 	struct dwc2_hsotg *hsotg = to_hsotg(gadget);
 	unsigned long flags;
 
-	dev_dbg(hsotg->dev, "%s: is_on: %d op_state: %d\n", __func__, is_on,
+	dev_info(hsotg->dev, "%s: is_on: %d op_state: %d\n", __func__, is_on,
 		hsotg->op_state);
 
 	/* Don't modify pullup state while in host mode */

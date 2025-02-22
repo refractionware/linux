@@ -46,6 +46,11 @@
 			interrupt-controller;
 		};
 
+		chipreg: syscon@1004000 {
+			compatible = "brcm,kona-chipregs", "syscon";
+			reg = <0x01004000 0x1f4>;
+		};
+
 		pinctrl: pinctrl@1004800 {
 			compatible = "brcm,bcm21664-pinctrl";
 			reg = <0x01004800 0x7f4>;
@@ -155,13 +160,18 @@
 		#size-cells = <1>;
 
 		usbotg: usb@e20000 {
-			compatible = "snps,dwc2";
+			compatible = "brcm,kona-hsotg";
 			reg = <0x00e20000 0x10000>;
 			interrupts = <GIC_SPI 47 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&master_ccu BCM21664_MASTER_CCU_USB_OTG_AHB>;
 			clock-names = "otg";
 			phys = <&usbphy>;
 			phy-names = "usb2-phy";
+			g-rx-fifo-size = <1064>;
+			g-np-tx-fifo-size = <32>;
+			g-tx-fifo-size = <256 256 256 256 256 256 256 256
+					  256 256 256 256 256 256 256 256>;
+			dr_mode = "gadget";
 			status = "disabled";
 		};
 
@@ -169,6 +179,10 @@
 			compatible = "brcm,kona-usb2-phy";
 			reg = <0x00e30000 0x28>;
 			#phy-cells = <0>;
+			clocks = <&master_ccu BCM21664_MASTER_CCU_USB_OTG_AHB>,
+				 <&hub_ccu BCM21664_HUB_CCU_MDIOMASTER>;
+			clock-names = "otg", "mdio";
+			brcm,chipreg-syscon = <&chipreg>;
 			status = "disabled";
 		};
 
@@ -303,6 +317,13 @@
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
 			clock-frequency = <156000000>;
+		};
+
+		hub_ccu: hub_ccu@34000000 {
+			compatible = "brcm,bcm21664-hub-ccu";
+			reg = <0x34000000 0x0f00>;
+			#clock-cells = <1>;
+			clock-output-names = "mdiomaster";
 		};
 
 		root_ccu: root_ccu@35001000 {
