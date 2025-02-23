@@ -169,9 +169,8 @@
 			phy-names = "usb2-phy";
 			g-rx-fifo-size = <1064>;
 			g-np-tx-fifo-size = <32>;
-			g-tx-fifo-size = <256 256 256 256 256 256 256 256
-					  256 256 256 256 256 256 256 256>;
-			dr_mode = "gadget";
+			g-tx-fifo-size = <190 190 190 190 190 190 190 190
+					  190 190 190 190 190 190 190 190>;
 			status = "disabled";
 		};
 

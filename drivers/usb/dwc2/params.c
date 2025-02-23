@@ -35,9 +35,15 @@ static void dwc2_set_bcm_kona_params(struct dwc2_hsotg *hsotg)
 	p->ahbcfg = GAHBCFG_HBSTLEN_INCR8 <<
 		GAHBCFG_HBSTLEN_SHIFT;
 
-	//p->phy_type = DWC2_PHY_TYPE_PARAM_UTMI;
-	//p->phy_utmi_width = 8;
+	p->host_rx_fifo_size = 1064;
+	p->host_nperio_tx_fifo_size = 32;
+	p->host_perio_tx_fifo_size = 256;
 
+	p->lpm = false;
+	p->lpm_clock_gating = false;
+	p->besl = false;
+	p->hird_threshold_en = false;
+	p->no_clock_gating = true;
 }
 
 static void dwc2_set_his_params(struct dwc2_hsotg *hsotg)
@@ -778,8 +784,8 @@ static void dwc2_check_param_tx_fifo_sizes(struct dwc2_hsotg *hsotg)
 		total += hsotg->params.g_tx_fifo_size[fifo];
 
 	if (total > dwc2_hsotg_tx_fifo_total_depth(hsotg) || !total) {
-		dev_warn(hsotg->dev, "%s: Invalid parameter g-tx-fifo-size, setting to default average\n",
-			 __func__);
+		dev_warn(hsotg->dev, "%s: Invalid parameter g-tx-fifo-size (total %d, expected %d, fifo count %d), setting to default average\n",
+			 __func__, total,  dwc2_hsotg_tx_fifo_total_depth(hsotg), fifo_count);
 		dwc2_set_param_tx_fifo_sizes(hsotg);
 	}
 
