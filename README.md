@@ -13,8 +13,9 @@ Patches as they are submitted to the mailing list; contain the most up-to-date a
 ### Broadcom Kona
 
 * `b4/bcm59054`: BCM59054 support + regulator driver fixes.
-* `b4/bcm21664-pinctrl`: BCM21664 pinctrl support.
-* `b4/kona-gpio-fixes`: Fixes for GPIO bugs on Broadcom Kona.
+* `b4/kona-bus-clock`: Broadcom Kona bus clock support patches.
+* `b4/bcm21664-pinctrl`: BCM21664 pinctrl support (merged!)
+* `b4/kona-gpio-fixes`: Fixes for GPIO bugs on Broadcom Kona (merged!)
 
 ### Samsung Exynos 4
 
@@ -43,4 +44,9 @@ Some of these branches are pushed to https://gitlab.com/knuxify/linux, which is 
 
 Branches containing work-in-progress code for Broadcom Kona support. Stable branches reside on the [bcm-kona-mainline/linux](https://github.com/bcm-kona-mainline/linux) repo.
 
-- `baffinlite/6.10`: current "in-dev" tree for the Grand Neo.
+- `baffinlite/usb`: USB peripheral mode patches. Works, but needs cleanups. (Might do host mode too while we're at it?)
+- `baffinlite/timer-experiments`: More complete timer driver (clockevents still broken though...)
+- `baffinlite/bcm59054-ponkey`: Named PONKEY after the power-on key driver, but actually has a whole bunch of BCM59054 device drivers.
+- `baffinlite/cs02-mmc-experiments`: Random patches from when I was trying to figure out MMC issues on the BCM21664.
+- `baffinlite/6.10`: Old in-dev tree for Grand Neo, might be removed soon
+
