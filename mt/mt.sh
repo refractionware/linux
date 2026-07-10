@@ -129,11 +129,11 @@ mainline-build-pkg() {
 }
 [ "$MT_ALIASES" = "1" ] && alias mbp=mainline-build-pkg
 
-# mainline-sideload - sideload kernel package for the current device with `pmbootstrap build --envkernel`.
-mainline-sideload() {
+# mainline-sideload-pkg - sideload kernel package for the current device with `pmbootstrap build --envkernel`.
+mainline-sideload-pkg() {
 	pmbootstrap sideload $(_mt_kernel_pkg) || return $?
 }
-[ "$MT_ALIASES" = "1" ] && alias mbp=mainline-build-pkg
+[ "$MT_ALIASES" = "1" ] && alias msp=mainline-sideload-pkg
 
 ##
 ## INIT

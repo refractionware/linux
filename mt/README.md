@@ -16,4 +16,4 @@ Commands:
 * `mainline-package` (`mp`) - generate a boot.img from the built kernel, bypassing pmbootstrap's image building capabilities.
 * `mainline-flash` (`mf`) - flash the boot.img generated with `mp` to the device.
 * `mainline-build-pkg` (`mbp`) - build the kernel package with `pmbootstrap build --envkernel`.
-* `mainline-sideload` (`ms`) - sideload the kernel package built with `mbp`.
+* `mainline-sideload-pkg` (`msp`) - sideload the kernel package built with `mbp`.
