@@ -1685,6 +1685,149 @@ static bool __pll_clk_init(struct kona_clk *bcm_clk)
 	return true;
 }
 
+static int kona_pll_chnl_clk_enable(struct clk_hw *hw)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct ccu_data *ccu = bcm_clk->ccu;
+	u32 reg_val;
+
+	__ccu_write_enable(ccu);
+
+	/* Set enable bit */
+	reg_val = __ccu_read(ccu, pll_chnl->enable.offset);
+	reg_val |= 1 << (pll_chnl->enable.bit);
+	__ccu_write(ccu, pll_chnl->enable.offset, reg_val);
+
+	/* Tell the PLL channel to reload values */
+	reg_val = __ccu_read(ccu, pll_chnl->load.offset);
+	reg_val |= 1 << (pll_chnl->load.en_bit);
+	__ccu_write(ccu, pll_chnl->load.offset, reg_val);
+
+	__ccu_write_disable(ccu);
+
+	return 0;
+}
+
+static void kona_pll_chnl_clk_disable(struct clk_hw *hw)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct ccu_data *ccu = bcm_clk->ccu;
+	u32 reg_val;
+
+	__ccu_write_enable(ccu);
+
+	/* Clear enable bit */
+	reg_val = __ccu_read(ccu, pll_chnl->enable.offset);
+	reg_val &= ~(1 << (pll_chnl->enable.bit));
+	__ccu_write(ccu, pll_chnl->enable.offset, reg_val);
+
+	__ccu_write_disable(ccu);
+}
+
+static int kona_pll_chnl_clk_is_enabled(struct clk_hw *hw)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct ccu_data *ccu = bcm_clk->ccu;
+	u32 reg_val;
+
+	/*
+	 * Get the value of the enable bit; if it's set, the clock is
+	 * enabled, otherwise it's disabled.
+	 */
+	reg_val = __ccu_read(ccu, pll_chnl->enable.offset);
+	reg_val &= ~(1 << (pll_chnl->enable.bit));
+
+	return (bool)reg_val;
+}
+
+static int kona_pll_chnl_clk_determine_rate(struct clk_hw *hw,
+				struct clk_rate_request *req)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct bcm_pll_chnl_mdiv *mdiv_reg = &pll_chnl->mdiv;
+	u32 max_mdiv = (1 << mdiv_reg->width) + 1;
+	u32 mdiv;
+
+	/* Calculate mdiv value */
+	mdiv = (u32)(req->best_parent_rate / req->rate);
+	if (mdiv > max_mdiv)
+		mdiv = max_mdiv;
+
+	req->rate = req->best_parent_rate / (unsigned long)mdiv;
+
+	return 0;
+}
+
+static unsigned long kona_pll_chnl_clk_recalc_rate(struct clk_hw *hw,
+			unsigned long parent_rate)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct bcm_pll_chnl_mdiv *mdiv_reg = &pll_chnl->mdiv;
+	struct ccu_data *ccu = bcm_clk->ccu;
+	u32 max_mdiv = (1 << mdiv_reg->width) + 1;
+	u32 reg_val;
+	u32 mdiv;
+
+	/* Get mdiv value */
+	reg_val = __ccu_read(ccu, mdiv_reg->offset);
+	mdiv = bitfield_extract(reg_val, mdiv_reg->shift, mdiv_reg->width);
+	if (mdiv > max_mdiv)
+		mdiv = max_mdiv;
+
+	return parent_rate / (unsigned long)mdiv;
+}
+
+static int kona_pll_chnl_clk_set_rate(struct clk_hw *hw, unsigned long rate,
+			unsigned long parent_rate)
+{
+	struct kona_clk *bcm_clk = to_kona_clk(hw);
+	const char *name = bcm_clk->init_data.name;
+	struct pll_chnl_clk_data *pll_chnl = bcm_clk->u.pll_chnl;
+	struct bcm_pll_chnl_mdiv *mdiv_reg = &pll_chnl->mdiv;
+	struct bcm_pll_chnl_load *load = &pll_chnl->load;
+	struct ccu_data *ccu = bcm_clk->ccu;
+	u32 reg_val;
+	u32 mdiv;
+
+	mdiv = (u32)(parent_rate / rate);
+	if (abs(rate - parent_rate / mdiv) > 100) {
+		pr_err("%s: invalid clock rate %lu for PLL channel clock %s\n",
+			__func__, rate, name);
+		return -EINVAL;
+	}
+
+	__ccu_write_enable(ccu);
+
+	/* Write divider to PLL registers */
+	reg_val = __ccu_read(ccu, mdiv_reg->offset);
+	reg_val = bitfield_replace(reg_val, mdiv_reg->shift, mdiv_reg->width,
+							   mdiv);
+	__ccu_write(ccu, mdiv_reg->offset, reg_val);
+
+	/* Tell the PLL channel to load the values */
+	reg_val = __ccu_read(ccu, load->offset);
+	reg_val |= 1 << load->en_bit;
+	__ccu_write(ccu, load->offset, reg_val);
+
+	__ccu_write_disable(ccu);
+
+	return 0;
+}
+
+const struct clk_ops kona_pll_chnl_clk_ops = {
+	.enable = kona_pll_chnl_clk_enable,
+	.disable = kona_pll_chnl_clk_disable,
+	.is_enabled = kona_pll_chnl_clk_is_enabled,
+	.set_rate = kona_pll_chnl_clk_set_rate,
+	.recalc_rate = kona_pll_chnl_clk_recalc_rate,
+	.determine_rate = kona_pll_chnl_clk_determine_rate,
+};
+
 static bool __kona_clk_init(struct kona_clk *bcm_clk)
 {
 	switch (bcm_clk->type) {
@@ -1694,6 +1837,8 @@ static bool __kona_clk_init(struct kona_clk *bcm_clk)
 		return __peri_clk_init(bcm_clk);
 	case bcm_clk_pll:
 		return __pll_clk_init(bcm_clk);
+	case bcm_clk_pll_chnl:
+		return true; /* No initialization needed */
 	default:
 		BUG();
 	}
