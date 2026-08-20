@@ -221,6 +221,74 @@
 		};
 	};
 
+	/* Multimedia/MM bus */
+	mm: mm-bus@3c000000 {
+		compatible = "simple-bus";
+		ranges = <0 0x3c000000 0x03000000>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		pixelvalve@5000 {
+			compatible = "brcm,bcm21664-pixelvalve0";
+			reg = <0x5000 0x100>;
+			interrupts = <GIC_SPI 180 IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		dma: dma-controller@a000 {
+			compatible = "brcm,bcm21664-dma";
+			reg = <0xa000 0xf00>;
+			interrupts = <GIC_SPI 151 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "dma0",
+					  "dma1",
+					  "dma2";
+			#dma-cells = <1>;
+			brcm,dma-channel-mask = <0x7>;
+		};
+
+		dsi_phy: dsi-phy-clk {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+		};
+
+		dsi0_esc: dsi0-esc {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+		};
+
+		dsi0_pixel: dsi0-pixel {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <32768>;
+		};
+
+		dsi0: dsi@200000 {
+			compatible = "brcm,bcm2835-dsi0";
+			reg = <0x00200000 0x78>;
+			interrupts = <GIC_SPI 154 IRQ_TYPE_LEVEL_HIGH>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#clock-cells = <1>;
+
+			clocks = <&dsi_phy>,
+				 <&dsi0_esc>,
+				 <&dsi0_pixel>;
+			/*clocks = <&mm_ccu BCM21664_MM_CCU_DSI_PLL>,
+				 <&mm_ccu BCM21664_MM_CCU_DSI0_ESC>,
+				 <&mm_ccu BCM21664_MM_CCU_PIXELV>;*/
+			clock-names = "phy", "escape", "pixel";
+
+			clock-output-names = "dsi0_byte",
+					     "dsi0_ddr2",
+					     "dsi0_ddr";
+
+			status = "disabled";
+		};
+	};
+
 	clocks {
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -321,6 +389,18 @@
 			clock-frequency = <156000000>;
 		};
 
+		var_312m_clk: var_312m {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <312000000>;
+		};
+
+		var_500m_clk: var_500m {
+			#clock-cells = <0>;
+			compatible = "fixed-clock";
+			clock-frequency = <500000000>;
+		};
+
 		root_ccu: root_ccu@35001000 {
 			compatible = "brcm,bcm21664-root-ccu";
 			reg = <0x35001000 0x0f00>;
@@ -376,6 +456,17 @@
 					     "sdio3_ahb",
 					     "sdio4_ahb",
 					     "usb_otg_ahb";
+		};
+
+		mm_ccu: mm_ccu@3c000000 {
+			compatible = "brcm,bcm21664-mm-ccu";
+			reg = <0x3c000000 0x0f00>;
+			#clock-cells = <1>;
+			clock-output-names = "dsi0_axi",
+					     "dsi_pll",
+					     "dsi0_esc",
+					     "pixelv_apb",
+					     "pixelv";
 		};
 	};
 };

@@ -617,6 +617,8 @@ struct bcm_pll_div {
 
 /* PLL clock data */
 struct pll_clk_data {
+	struct bcm_clk_policy policy;
+
 	struct bcm_pll_cfg cfg;
 	struct bcm_pll_desense desense;
 	struct bcm_pll_pwrdwn pwrdwn;

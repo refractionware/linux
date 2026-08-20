@@ -1660,6 +1660,12 @@ static bool __pll_clk_init(struct kona_clk *bcm_clk)
 
 	BUG_ON(bcm_clk->type != bcm_clk_pll);
 
+	if (!policy_init(ccu, &pll->policy)) {
+		pr_err("%s: error initializing policy for %s\n",
+			__func__, name);
+		return false;
+	}
+
 	/*
 	 * If the clock is autogated, we set the idle powerdown override bit,
 	 * otherwise we unset it.

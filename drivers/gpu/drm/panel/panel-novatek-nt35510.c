@@ -1130,14 +1130,14 @@ static int nt35510_probe(struct mipi_dsi_device *dsi)
 				      nt->supplies);
 	if (ret < 0)
 		return ret;
-	ret = regulator_set_voltage(nt->supplies[0].consumer,
+	/*ret = regulator_set_voltage(nt->supplies[0].consumer,
 				    2300000, 4800000);
 	if (ret)
-		return ret;
-	ret = regulator_set_voltage(nt->supplies[1].consumer,
+		return ret;*/
+	/*ret = regulator_set_voltage(nt->supplies[1].consumer,
 				    1650000, 3300000);
 	if (ret)
-		return ret;
+		return ret;*/
 
 	nt->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(nt->reset_gpio)) {
@@ -1382,6 +1382,100 @@ static const struct nt35510_config nt35510_frida_frd400b25025 = {
 	.wrcabcmb = 0xff,
 };
 
+/*
+ * Unknown panel, used in Samsung Galaxy Trend Plus (kylepro)
+ */
+static const struct nt35510_config nt35510_kylepro = {
+	.width_mm = 52,
+	.height_mm = 86,
+	/**
+	 * As this panel is used in command mode, the porches etc
+	 * are settings programmed internally into the NT35510 controller
+	 * and generated toward the physical display. As the panel is not
+	 * used in video mode, these are not really exposed to the DSI
+	 * host.
+	 *
+	 * Display frame rate control:
+	 * Frame rate = (20 MHz / 1) / (389 * (7 + 50 + 800)) ~= 60 Hz
+	 */
+	.mode = {
+		/* The internal pixel clock of the NT35510 is 20 MHz */
+		.clock = 20000,
+		.hdisplay = 480,
+		.hsync_start = 480 + 2, /* HFP = 2 */
+		.hsync_end = 480 + 2 + 0, /* HSync = 0 */
+		.htotal = 480 + 2 + 0 + 5, /* HBP = 5 */
+		.vdisplay = 800,
+		.vsync_start = 800 + 2, /* VFP = 2 */
+		.vsync_end = 800 + 2 + 0, /* VSync = 0 */
+		.vtotal = 800 + 2 + 0 + 5, /* VBP = 5 */
+		.flags = 0,
+	},
+	.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+	.cmds = NT35510_CMD_CORRECT_GAMMA,
+
+	/* 0x09: AVDD = 5.6V */
+	.avdd = { 0x09, 0x09, 0x09 },
+	/* 0x34: PCK = Hsync/2, BTP = 2 x VDDB */
+	.bt1ctr = { 0x34, 0x34, 0x34 },
+	/* 0x09: AVEE = -5.6V */
+	.avee = { 0x09, 0x09, 0x09 },
+	/* 0x24: NCK = Hsync/2, BTN =  -2 x VDDB */
+	.bt2ctr = { 0x24, 0x24, 0x24 },
+	/* 0x05 = 12V */
+	.vgh = { 0x05, 0x05, 0x05 },
+	/* 0x25: ??? */
+	.bt4ctr = { 0x25, 0x25, 0x25 },
+	/* 0x0B = -13V */
+	.vgl = { 0x0B, 0x0B, 0x0B },
+	/* 0x24: LCKA = Hsync, VGL = AVDD + VCL - AVDD */
+	.bt5ctr = { 0x24, 0x24, 0x24 },
+	/* todo: 0xC2 0x01 */
+	/* VGMP: 0x0A3 = 5.0375V, VGSP = 0V */
+	.vgp = { 0x00, 0xA3, 0x00 },
+	/* VGMP: 0x0A3 = 5.0375V, VGSP = 0V */
+	.vgn = { 0x00, 0xA3, 0x00 },
+
+	/* Enable TE, EoTP and RGB pixel format */
+	.dopctr = { NT35510_DOPCTR_0_DSITE | NT35510_DOPCTR_0_EOTP |
+		    NT35510_DOPCTR_0_N565, NT35510_DOPCTR_1_CTB },
+	/* 0x0A: SDT = 5 us */
+	.sdhdtctr = 0x0A,
+	/* EQ control for gate signals, 0x00 = 0 us */
+	.gseqctr = { 0x00, 0x00 },
+	/* SDEQCTR: source driver EQ mode 2, 2.5 us rise time on each step */
+	.sdeqctr = { 0x01, 0x05, 0x05, 0x05 },
+	/* SDVPCTR: Normal operation off color during v porch */
+	.sdvpctr = 0x01,
+	/* T1: number of pixel clocks on one scanline: 0x184 = 389 clocks */
+	.t1 = 0x0184,
+	/* VBP: vertical back porch toward the panel */
+	.vbp = 7,
+	/* VFP: vertical front porch toward the panel */
+	.vfp = 50,
+	/* PSEL: divide pixel clock 20MHz with 1 (no clock downscaling) */
+	.psel = 0,
+	/* DPTMCTR12: 0x03: LVGL = VGLX, overlap mode, swap R->L O->E */
+	.dpmctr12 = { 0x03, 0x00, 0x00, },
+
+	/* VBCLA: -2.5V, VBCLB: -2.5V, VBCLC: -2.5V */
+	.vcl = { 0x00, 0x00, 0x00 },
+	/* 0x24: CLCK = Hsync/2, BTN =  -1 x VDDB */
+	.bt3ctr = { 0x24, 0x24, 0x24 },
+	/* VCMOFFSEL = VCOM voltage offset mode, VCM = 0V */
+	.vcmoff = { 0x00, 0x00 },
+
+	.madctl = NT35510_ROTATE_0_SETTING,
+
+	/* Default gamma correction values */
+	.gamma_corr_pos_r = { NT35510_GAMMA_POS_DEFAULT },
+	.gamma_corr_pos_g = { NT35510_GAMMA_POS_DEFAULT },
+	.gamma_corr_pos_b = { NT35510_GAMMA_POS_DEFAULT },
+	.gamma_corr_neg_r = { NT35510_GAMMA_NEG_DEFAULT },
+	.gamma_corr_neg_g = { NT35510_GAMMA_NEG_DEFAULT },
+	.gamma_corr_neg_b = { NT35510_GAMMA_NEG_DEFAULT },
+};
+
 static const struct of_device_id nt35510_of_match[] = {
 	{
 		.compatible = "frida,frd400b25025",
@@ -1390,6 +1484,10 @@ static const struct of_device_id nt35510_of_match[] = {
 	{
 		.compatible = "hydis,hva40wv1",
 		.data = &nt35510_hydis_hva40wv1,
+	},
+	{
+		.compatible = "samsung,nt35510-kylepro",
+		.data = &nt35510_kylepro,
 	},
 	{ }
 };

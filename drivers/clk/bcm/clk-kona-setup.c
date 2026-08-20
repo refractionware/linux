@@ -623,9 +623,14 @@ static bool pll_div_valid(struct bcm_pll_div *div, const char *field_name,
 static bool pll_clk_reg_data_valid(struct kona_clk *bcm_clk)
 {
 	struct pll_clk_data *pll = bcm_clk->u.pll;
+	struct bcm_clk_policy *policy;
 	const char *name = bcm_clk->init_data.name;
 
 	BUG_ON(bcm_clk->type != bcm_clk_pll);
+
+	policy = &pll->policy;
+	if (policy_exists(policy) && !policy_valid(policy, name))
+		return false;
 
 	if (!pwrdwn_exists(&pll->pwrdwn) || !pwrdwn_valid(&pll->pwrdwn, name))
 		return false;

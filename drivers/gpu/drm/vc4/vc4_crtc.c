@@ -1189,6 +1189,21 @@ static const struct drm_crtc_helper_funcs vc4_crtc_helper_funcs = {
 	.get_scanout_position = vc4_crtc_get_scanout_position,
 };
 
+
+const struct vc4_pv_data bcm21664_pv_data = {
+	.base = {
+		.name = "pixelvalve",
+		.debugfs_name = "crtc0_regs",
+		.hvs_available_channels = BIT(0),
+		.hvs_output = 0,
+	},
+	.fifo_depth = 64,
+	.pixels_per_clock = 1,
+	.encoder_types = {
+		[PV_CONTROL_CLK_SELECT_DSI] = VC4_ENCODER_TYPE_DSI0,
+	},
+};
+
 const struct vc4_pv_data bcm2835_pv0_data = {
 	.base = {
 		.name = "pixelvalve-0",
@@ -1343,6 +1358,7 @@ static const struct of_device_id vc4_crtc_dt_match[] = {
 	{ .compatible = "brcm,bcm2711-pixelvalve4", .data = &bcm2711_pv4_data },
 	{ .compatible = "brcm,bcm2712-pixelvalve0", .data = &bcm2712_pv0_data },
 	{ .compatible = "brcm,bcm2712-pixelvalve1", .data = &bcm2712_pv1_data },
+	{ .compatible = "brcm,bcm21664-pixelvalve", .data = &bcm21664_pv_data },
 	{}
 };
 

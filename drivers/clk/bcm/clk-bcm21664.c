@@ -392,6 +392,84 @@ static struct ccu_data slave_ccu_data = {
 	},
 };
 
+/* MM CCU */
+
+static struct bus_clk_data dsi0_axi_data = {
+	.policy		= POLICY(0x0010, 1),
+	.gate		= HW_SW_GATE(0x280, 16, 0, 1),
+	.hyst		= HYST(0x280, 8, 9),
+};
+
+static struct pll_clk_data dsi_pll_data = {
+	.policy		= POLICY(0x0010, 11),
+
+	.cfg = {
+		PLL_CFG_OFFSET(0x0c24, 0, 28),
+
+		.tholds		= {FREQ_MHZ(1750), PLL_CFG_THOLD_MAX},
+		.cfg_values	= {0x8000000, 0x8102000},
+		.n_tholds	= 2,
+	},
+
+	.pwrdwn		= PLL_PWRDWN(0x0c00, 3, 4),
+	.reset		= PLL_RESET(0x0c00, 0, 1),
+	.lock		= PLL_LOCK(0x0c00, 28),
+
+	.pdiv 		= PLL_DIV(0x0c00, 24, 3),
+	.ndiv		= PLL_DIV(0x0c00, 8, 9),
+	.nfrac		= PLL_NFRAC(0x0c04, 0, 20),
+
+	.desense	= PLL_DESENSE_NFRAC(0x0c2c, 0),
+	.flags		= 0,
+
+	.xtal_name	= "ref_crystal",
+};
+
+static struct peri_clk_data dsi0_esc_data = {
+	.policy		= POLICY(0x0010, 1),
+	.gate		= HW_SW_GATE(0x284, 16, 0, 1),
+	.hyst		= HYST(0x284, 8, 9),
+	.sel		= SELECTOR(0xa1c, 4, 2),
+	.div		= DIVIDER(0xa1c, 8, 3),
+	.trig		= TRIGGER(0xafc, 4),
+	.clocks		= CLOCKS("var_500m", "var_312m"),
+};
+
+static struct bus_clk_data pixelv_apb_data = {
+	.policy		= POLICY(0x0010, 16),
+	.gate		= HW_SW_GATE(0x41c, 16, 0, 1),
+	.hyst		= HYST(0x284, 8, 9),
+};
+
+static struct peri_clk_data pixelv_data = {
+	.policy		= POLICY(0x0010, 16),
+	.gate		= SW_ONLY_GATE(0xa2c, 0, 0),
+	.clocks		= CLOCKS("ref_crystal"),   // todo verify
+};
+
+#define BCM21664_MM_CCU_CLK_COUNT	(BCM21664_MM_CCU_PIXELV + 1)
+
+static struct ccu_data mm_ccu_data = {
+	BCM21664_CCU_COMMON(mm, MM),
+	.policy		= {
+		.enable		= CCU_LVM_EN(0x0034, 0),
+		.control	= CCU_POLICY_CTL(0x000c, 0, 1, 2),
+	},
+	.kona_clks	= {
+		[BCM21664_MM_CCU_DSI0_AXI] =
+			KONA_CLK(mm, dsi0_axi, bus),
+		[BCM21664_MM_CCU_DSI_PLL] =
+			KONA_CLK(mm, dsi_pll, pll),
+		[BCM21664_MM_CCU_DSI0_ESC] =
+			KONA_CLK(mm, dsi0_esc, peri),
+		[BCM21664_MM_CCU_PIXELV_APB] =
+			KONA_CLK(mm, pixelv_apb, bus),
+		[BCM21664_MM_CCU_PIXELV] =
+			KONA_CLK(mm, pixelv, peri),
+		[BCM21664_MM_CCU_CLK_COUNT] = LAST_KONA_CLK,
+	},
+};
+
 /* Device tree match table callback functions */
 
 static void __init kona_dt_root_ccu_setup(struct device_node *node)
@@ -414,6 +492,11 @@ static void __init kona_dt_slave_ccu_setup(struct device_node *node)
 	kona_dt_ccu_setup(&slave_ccu_data, node);
 }
 
+static void __init kona_dt_mm_ccu_setup(struct device_node *node)
+{
+	kona_dt_ccu_setup(&mm_ccu_data, node);
+}
+
 CLK_OF_DECLARE(bcm21664_root_ccu, BCM21664_DT_ROOT_CCU_COMPAT,
 			kona_dt_root_ccu_setup);
 CLK_OF_DECLARE(bcm21664_aon_ccu, BCM21664_DT_AON_CCU_COMPAT,
@@ -422,3 +505,5 @@ CLK_OF_DECLARE(bcm21664_master_ccu, BCM21664_DT_MASTER_CCU_COMPAT,
 			kona_dt_master_ccu_setup);
 CLK_OF_DECLARE(bcm21664_slave_ccu, BCM21664_DT_SLAVE_CCU_COMPAT,
 			kona_dt_slave_ccu_setup);
+CLK_OF_DECLARE(bcm21664_mm_ccu, BCM21664_DT_MM_CCU_COMPAT,
+			kona_dt_mm_ccu_setup);

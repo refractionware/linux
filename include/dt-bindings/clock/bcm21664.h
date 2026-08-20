@@ -17,6 +17,7 @@
 #define BCM21664_DT_AON_CCU_COMPAT	"brcm,bcm21664-aon-ccu"
 #define BCM21664_DT_MASTER_CCU_COMPAT	"brcm,bcm21664-master-ccu"
 #define BCM21664_DT_SLAVE_CCU_COMPAT	"brcm,bcm21664-slave-ccu"
+#define BCM21664_DT_MM_CCU_COMPAT	"brcm,bcm21664-mm-ccu"
 
 /* root CCU clock ids */
 
@@ -61,5 +62,13 @@
 #define BCM21664_SLAVE_CCU_BSC2_APB		11
 #define BCM21664_SLAVE_CCU_BSC3_APB		12
 #define BCM21664_SLAVE_CCU_BSC4_APB		13
+
+/* MM CCU clock ids */
+
+#define BCM21664_MM_CCU_DSI0_AXI		0
+#define BCM21664_MM_CCU_DSI_PLL			1
+#define BCM21664_MM_CCU_DSI0_ESC		2
+#define BCM21664_MM_CCU_PIXELV_APB		3
+#define BCM21664_MM_CCU_PIXELV			4
 
 #endif /* _CLOCK_BCM21664_H */

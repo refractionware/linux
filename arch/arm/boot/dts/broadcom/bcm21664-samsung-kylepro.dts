@@ -49,10 +49,10 @@
 			no-map;
 		};
 
-		simplefb: framebuffer@ae980000 {
+		/*simplefb: framebuffer@ae980000 {
 			reg = <0xae980000 (480 * 800 * 4)>;
 			no-map;
-		};
+		};*/
 	};
 
 	/* Buttons */
@@ -121,7 +121,7 @@
 		enable-active-high;
 	};
 
-	framebuffer@ae980000 {
+	/*framebuffer@ae980000 {
 		compatible = "simple-framebuffer";
 		reg = <0xae980000 (480 * 800 * 4)>;
 		width = <480>;
@@ -129,7 +129,7 @@
 		stride = <(480 * 4)>;
 		format = "a8r8g8b8";
 		status = "okay";
-	};
+	};*/
 };
 
 &uartb {
@@ -478,5 +478,18 @@
 		interrupt-parent = <&gpio>;
 		interrupts = <74 IRQ_TYPE_EDGE_FALLING>;
 		interrupt-names = "host-wake";
+	};
+};
+
+&dsi0 {
+	status = "okay";
+
+	panel {
+		compatible = "samsung,nt35510-kylepro", "novatek,nt35510";
+		reg = <0>;
+		vdd-supply = <&camldo2_reg>;
+		vddi-supply = <&iosr1_reg>;
+		reset-gpios = <&gpio 22 GPIO_ACTIVE_LOW>;
+		//backlight = <&ktd253>;
 	};
 };

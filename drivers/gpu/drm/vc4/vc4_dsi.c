@@ -1375,12 +1375,6 @@ static int vc4_dsi_host_attach(struct mipi_dsi_host *host,
 		return 0;
 	}
 
-	if (!(dsi->mode_flags & MIPI_DSI_MODE_VIDEO)) {
-		dev_err(&dsi->pdev->dev,
-			"Only VIDEO mode panels supported currently.\n");
-		return 0;
-	}
-
 	drm_bridge_add(&dsi->bridge);
 
 	ret = component_add(&dsi->pdev->dev, &vc4_dsi_ops);
