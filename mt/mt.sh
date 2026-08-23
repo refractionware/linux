@@ -73,7 +73,7 @@ mainline-package() {
 	fi
 
 	# Generate boot.img
-	pmbootstrap chroot -- apk add android-tools mkbootimg dtbtool distcc || return $?
+	pmbootstrap chroot -- apk add android-tools mkbootimg dtbtool || return $?
 	if ! [ -d "$tempdir" ]; then mkdir -p "$tempdir" || return $?; fi
 	cat "$MT_LINUX_DIR"/.output/arch/$_image $_dtb > "$MT_LINUX_DIR"/.zImage-dtb || return $?
 	sudo cp "$MT_LINUX_DIR"/.zImage-dtb  "$tempdir"/zImage || return $?
